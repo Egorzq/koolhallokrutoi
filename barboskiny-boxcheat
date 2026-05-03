@@ -1,5 +1,4 @@
 -- Службы
-local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
@@ -14,18 +13,17 @@ local pointsList = {}
 local isLooping = false
 local isMoving = false
 local autoDetectPrompts = false
-local currentTween = nil
 
 -- Создание GUI
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "SmartRouteTester"
+screenGui.Name = "FastFreezeTeleport"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame", screenGui)
 mainFrame.Size = UDim2.new(0, 350, 0, 520)
 mainFrame.Position = UDim2.new(0.5, -175, 0.5, -260)
-mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 mainFrame.Active = true
 Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
@@ -47,12 +45,12 @@ end)
 
 -- === ИНТЕРФЕЙС ===
 local title = Instance.new("TextLabel", mainFrame)
-title.Size = UDim2.new(1, 0, 0, 40); title.Text = "SMART TELEPORT & PROMPT"; title.TextColor3 = Color3.new(1, 1, 1)
+title.Size = UDim2.new(1, 0, 0, 40); title.Text = "FAST TP & FREEZE"; title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.SourceSansBold; title.BackgroundTransparency = 1
 
 local scrollFrame = Instance.new("ScrollingFrame", mainFrame)
 scrollFrame.Size = UDim2.new(0.9, 0, 0, 200); scrollFrame.Position = UDim2.new(0.05, 0, 0, 70)
-scrollFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35); scrollFrame.ScrollBarThickness = 6
+scrollFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30); scrollFrame.ScrollBarThickness = 6
 local layout = Instance.new("UIListLayout", scrollFrame); layout.Padding = UDim.new(0, 5)
 
 local addPointBtn = Instance.new("TextButton", mainFrame)
@@ -62,7 +60,7 @@ Instance.new("UICorner", addPointBtn)
 
 local speedInput = Instance.new("TextBox", mainFrame)
 speedInput.Size = UDim2.new(0.4, 0, 0, 30); speedInput.Position = UDim2.new(0.05, 0, 0, 320)
-speedInput.PlaceholderText = "Путь (сек)"; speedInput.Text = "2"; speedInput.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+speedInput.PlaceholderText = "Пауза (сек)"; speedInput.Text = "1"; speedInput.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 speedInput.TextColor3 = Color3.new(1, 1, 1); Instance.new("UICorner", speedInput)
 
 local loopBtn = Instance.new("TextButton", mainFrame)
@@ -70,31 +68,25 @@ loopBtn.Size = UDim2.new(0.45, 0, 0, 30); loopBtn.Position = UDim2.new(0.5, 0, 0
 loopBtn.Text = "Цикл: ВЫКЛ"; loopBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100); loopBtn.TextColor3 = Color3.new(1, 1, 1)
 Instance.new("UICorner", loopBtn)
 
--- НОВАЯ КНОПКА: Авто-детект промптов
 local detectBtn = Instance.new("TextButton", mainFrame)
 detectBtn.Size = UDim2.new(0.9, 0, 0, 35); detectBtn.Position = UDim2.new(0.05, 0, 0, 360)
-detectBtn.Text = "Авто-поиск ProximityPrompt: ВЫКЛ"; detectBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100); detectBtn.TextColor3 = Color3.new(1, 1, 1)
+detectBtn.Text = "Авто-Prompt: ВЫКЛ"; detectBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100); detectBtn.TextColor3 = Color3.new(1, 1, 1)
 Instance.new("UICorner", detectBtn)
 
 local startBtn = Instance.new("TextButton", mainFrame)
 startBtn.Size = UDim2.new(0.9, 0, 0, 50); startBtn.Position = UDim2.new(0.05, 0, 0, 440)
-startBtn.Text = "ЗАПУСТИТЬ ТЕСТ"; startBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 70); startBtn.TextColor3 = Color3.new(1, 1, 1)
+startBtn.Text = "НАЧАТЬ ПРЫЖКИ"; startBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 70); startBtn.TextColor3 = Color3.new(1, 1, 1)
 startBtn.Font = Enum.Font.SourceSansBold; startBtn.TextSize = 20; Instance.new("UICorner", startBtn)
 
 -- === ЛОГИКА ===
 
 local function findNearestPrompt()
-	local maxDist = 15 -- Радиус поиска
+	local maxDist = 20
 	local nearest = nil
-	local minDist = maxDist
-
 	for _, v in ipairs(workspace:GetDescendants()) do
 		if v:IsA("ProximityPrompt") then
 			local dist = (rootPart.Position - v.Parent:GetPivot().Position).Magnitude
-			if dist < minDist then
-				minDist = dist
-				nearest = v
-			end
+			if dist < maxDist then nearest = v; maxDist = dist end
 		end
 	end
 	return nearest
@@ -124,7 +116,7 @@ end
 
 detectBtn.MouseButton1Click:Connect(function()
 	autoDetectPrompts = not autoDetectPrompts
-	detectBtn.Text = autoDetectPrompts and "Авто-поиск ProximityPrompt: ВКЛ" or "Авто-поиск ProximityPrompt: ВЫКЛ"
+	detectBtn.Text = autoDetectPrompts and "Авто-Prompt: ВКЛ" or "Авто-Prompt: ВЫКЛ"
 	detectBtn.BackgroundColor3 = autoDetectPrompts and Color3.fromRGB(255, 130, 0) or Color3.fromRGB(100, 100, 100)
 end)
 
@@ -138,57 +130,67 @@ addPointBtn.MouseButton1Click:Connect(createPointRow)
 createPointRow()
 
 local function stopMoving()
-	isMoving = false; if currentTween then currentTween:Cancel() end
-	startBtn.Text = "ЗАПУСТИТЬ ТЕСТ"; startBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 70)
+	isMoving = false
+	rootPart.Anchored = false -- Важно: размораживаем при остановке
+	startBtn.Text = "НАЧАТЬ ПРЫЖКИ"; startBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 70)
 end
 
 startBtn.MouseButton1Click:Connect(function()
 	if isMoving then stopMoving() return end
+	
 	local validPoints = {}
 	for _, entry in ipairs(pointsList) do
 		local pos = parseCoords(entry.Input.Text)
 		if pos then table.insert(validPoints, pos) end
 	end
+	
 	if #validPoints < 1 then return end
 
-	isMoving = true; startBtn.Text = "СТОП"; startBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
-	local speed = tonumber(speedInput.Text) or 2
+	isMoving = true
+	startBtn.Text = "СТОП"
+	startBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+	local waitTime = tonumber(speedInput.Text) or 1
 
 	task.spawn(function()
 		while isMoving do
 			for _, targetPos in ipairs(validPoints) do
 				if not isMoving then break end
 				
-				-- Полет к точке
-				local tweenInfo = TweenInfo.new(speed, Enum.EasingStyle.Linear)
-				currentTween = TweenService:Create(rootPart, tweenInfo, {CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))})
-				currentTween:Play()
-				currentTween.Completed:Wait()
+				-- 1. МГНОВЕННЫЙ ТЕЛЕПОРТ
+				rootPart.Anchored = false -- Размораживаем на миллисекунду для ТП
+				rootPart.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
 				
-				-- УМНОЕ НАЖАТИЕ
-				if autoDetectPrompts and isMoving then
+				-- 2. МГНОВЕННАЯ ЗАМОРОЗКА
+				task.wait(0.05) -- Крошечная пауза чтобы движок Roblox обновил позицию
+				rootPart.Anchored = true
+				
+				-- 3. РАБОТА С PROMPT
+				if autoDetectPrompts then
 					local prompt = findNearestPrompt()
 					if prompt then
--- 1. Доворачиваем персонажа к промпту (чтобы он точно был в фокусе)
 						rootPart.CFrame = CFrame.lookAt(rootPart.Position, prompt.Parent:GetPivot().Position)
-						
-						startBtn.Text = "АКТИВАЦИЯ: " .. prompt.ObjectText
-						task.wait(0.2)
-						
-						-- 2. Симулируем нажатие клавиши промпта (обычно E)
-						local key = prompt.KeyboardKeyCode
+						startBtn.Text = "ЖМУ: " .. (prompt.ObjectText or "???")
+local key = prompt.KeyboardKeyCode
 						VirtualInputManager:SendKeyEvent(true, key, false, game)
-						
-						-- 3. Ждем ровно столько, сколько требует промпт + 0.1 сек запаса
-						task.wait(prompt.HoldDuration + 0.1)
-						
+						task.wait(prompt.HoldDuration + 0.2)
 						VirtualInputManager:SendKeyEvent(false, key, false, game)
-						task.wait(0.5) -- Пауза после активации
+						
+						task.wait(0.3)
 						startBtn.Text = "СТОП"
 					end
 				end
+				
+				-- Ждем перед следующим прыжком
+				task.wait(waitTime)
 			end
+			
 			if not isLooping then stopMoving(); break end
 		end
 	end)
+end)
+
+-- Обновление координат в GUI
+RunService.RenderStepped:Connect(function()
+	local pos = rootPart.Position
+	title.Text = string.format("%.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z)
 end)
