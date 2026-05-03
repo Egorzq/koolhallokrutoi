@@ -1,0 +1,261 @@
+-- Службы
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager") -- Сервис для имитации нажатий
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+-- Состояние
+local pointsList = {}
+local isLooping = false
+local isMoving = false
+local useInteraction = false
+local currentTween = nil
+
+-- Создание GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoRouteTester"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 350, 0, 520) -- Увеличил высоту для новых настроек
+mainFrame.Position = UDim2.new(0.5, -175, 0.5, -260)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+mainFrame.Active = true
+mainFrame.Parent = screenGui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
+
+-- === ПЕРЕТАСКИВАНИЕ (DRAGGABLE) ===
+local dragging, dragInput, dragStart, startPos
+mainFrame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true; dragStart = input.Position; startPos = mainFrame.Position
+		input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+	end
+end)
+mainFrame.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end end)
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end)
+
+-- === ЭЛЕМЕНТЫ ИНТЕРФЕЙСА ===
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(1, 0, 0, 40)
+title.Text = "МАРШРУТ С АВТО-КНОПКОЙ"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.SourceSansBold
+title.BackgroundTransparency = 1
+
+local posLabel = Instance.new("TextLabel", mainFrame)
+posLabel.Size = UDim2.new(1, 0, 0, 20)
+posLabel.Position = UDim2.new(0, 0, 0, 35)
+posLabel.Text = "Позиция: 0, 0, 0"
+posLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+posLabel.BackgroundTransparency = 1
+
+local scrollFrame = Instance.new("ScrollingFrame", mainFrame)
+scrollFrame.Size = UDim2.new(0.9, 0, 0, 180)
+scrollFrame.Position = UDim2.new(0.05, 0, 0, 70)
+scrollFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+scrollFrame.ScrollBarThickness = 6
+local layout = Instance.new("UIListLayout", scrollFrame)
+layout.Padding = UDim.new(0, 5)
+
+-- Кнопки
+local addPointBtn = Instance.new("TextButton", mainFrame)
+addPointBtn.Size = UDim2.new(0.9, 0, 0, 30)
+addPointBtn.Position = UDim2.new(0.05, 0, 0, 260)
+addPointBtn.Text = "+ Добавить точку"
+addPointBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+addPointBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", addPointBtn)
+
+-- Настройки времени перемещения
+local speedLabel = Instance.new("TextLabel", mainFrame)
+speedLabel.Size = UDim2.new(0.4, 0, 0, 20)
+speedLabel.Position = UDim2.new(0.05, 0, 0, 300)
+speedLabel.Text = "Время пути (сек):"
+speedLabel.TextColor3 = Color3.new(0.8, 0.8, 0.8)
+speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+speedLabel.BackgroundTransparency = 1
+
+local speedInput = Instance.new("TextBox", mainFrame)
+speedInput.Size = UDim2.new(0.4, 0, 0, 30)
+speedInput.Position = UDim2.new(0.05, 0, 0, 320)
+speedInput.Text = "2"
+speedInput.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+speedInput.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", speedInput)
+
+-- Настройка взаимодействия (Клавиша E)
+local interactBtn = Instance.new("TextButton", mainFrame)
+interactBtn.Size = UDim2.new(0.45, 0, 0, 30)
+interactBtn.Position = UDim2.new(0.5, 0, 0, 360)
+interactBtn.Text = "Нажать (E): ВЫКЛ"
+interactBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+interactBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", interactBtn)
+
+local holdInput = Instance.new("TextBox", mainFrame)
+holdInput.Size = UDim2.new(0.4, 0, 0, 30)
+holdInput.Position = UDim2.new(0.05, 0, 0, 360)
+holdInput.PlaceholderText = "Удержание (сек)"
+holdInput.Text = "2"
+holdInput.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+holdInput.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", holdInput)
+
+local loopBtn = Instance.new("TextButton", mainFrame)
+loopBtn.Size = UDim2.new(0.45, 0, 0, 30)
+loopBtn.Position = UDim2.new(0.5, 0, 0, 320)
+loopBtn.Text = "Цикл: ВЫКЛ"
+loopBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+loopBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", loopBtn)
+
+local startBtn = Instance.new("TextButton", mainFrame)
+startBtn.Size = UDim2.new(0.9, 0, 0, 50)
+startBtn.Position = UDim2.new(0.05, 0, 0, 440)
+startBtn.Text = "ЗАПУСТИТЬ"
+startBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 70)
+startBtn.TextColor3 = Color3.new(1, 1, 1)
+startBtn.Font = Enum.Font.SourceSansBold
+startBtn.TextSize = 20
+Instance.new("UICorner", startBtn)
+
+-- === ФУНКЦИИ ===
+
+local function parseCoords(str)
+	local coords = {}
+	for val in string.gmatch(str, "([^,]+)") do table.insert(coords, tonumber(val)) end
+	return #coords == 3 and Vector3.new(coords[1], coords[2], coords[3]) or nil
+end
+
+local function createPointRow()
+	local frame = Instance.new("Frame", scrollFrame)
+	frame.Size = UDim2.new(1, -10, 0, 35)
+	frame.BackgroundTransparency = 1
+	
+	local input = Instance.new("TextBox", frame)
+	input.Size = UDim2.new(0.55, 0, 1, 0)
+	input.PlaceholderText = "X, Y, Z"
+	input.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	input.TextColor3 = Color3.new(1, 1, 1)
+	input.TextScaled = true
+	
+	local getBtn = Instance.new("TextButton", frame)
+	getBtn.Size = UDim2.new(0.25, 0, 1, 0)
+	getBtn.Position = UDim2.new(0.57, 0, 0, 0)
+	getBtn.Text = "Тут"
+	getBtn.BackgroundColor3 = Color3.fromRGB(0, 85, 127)
+	getBtn.TextColor3 = Color3.new(1, 1, 1)
+	
+	local delBtn = Instance.new("TextButton", frame)
+	delBtn.Size = UDim2.new(0.15, 0, 1, 0)
+	delBtn.Position = UDim2.new(0.84, 0, 0, 0)
+	delBtn.Text = "X"
+	delBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+	delBtn.TextColor3 = Color3.new(1, 1, 1)
+
+	local entry = {Frame = frame, Input = input}
+	table.insert(pointsList, entry)
+
+	getBtn.MouseButton1Click:Connect(function()
+		input.Text = string.format("%.1f, %.1f, %.1f", rootPart.Position.X, rootPart.Position.Y, rootPart.Position.Z)
+	end)
+
+	delBtn.MouseButton1Click:Connect(function()
+		for i, v in ipairs(pointsList) do if v == entry then table.remove(pointsList, i) break end end
+		frame:Destroy()
+	end)
+end
+
+-- Переключатели
+interactBtn.MouseButton1Click:Connect(function()
+	useInteraction = not useInteraction
+	interactBtn.Text = useInteraction and "Нажать (E): ВКЛ" or "Нажать (E): ВЫКЛ"
+	interactBtn.BackgroundColor3 = useInteraction and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(100, 100, 100)
+end)
+
+loopBtn.MouseButton1Click:Connect(function()
+	isLooping = not isLooping
+	loopBtn.Text = isLooping and "Цикл: ВКЛ" or "Цикл: ВЫКЛ"
+	loopBtn.BackgroundColor3 = isLooping and Color3.fromRGB(180, 100, 0) or Color3.fromRGB(100, 100, 100)
+end)
+
+addPointBtn.MouseButton1Click:Connect(createPointRow)
+createPointRow() -- Первая точка сразу
+
+local function stopMoving()
+	isMoving = false
+	if currentTween then currentTween:Cancel() end
+	startBtn.Text = "ЗАПУСТИТЬ"
+	startBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 70)
+end
+
+-- Основной цикл движения
+startBtn.MouseButton1Click:Connect(function()
+	if isMoving then stopMoving() return end
+	
+	local validPoints = {}
+	for _, entry in ipairs(pointsList) do
+		local pos = parseCoords(entry.Input.Text)
+		if pos then table.insert(validPoints, pos) end
+	end
+	
+	if #validPoints < 1 then return end
+
+	isMoving = true
+	startBtn.Text = "СТОП"
+  startBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+	
+	local duration = tonumber(speedInput.Text) or 2
+	local holdDuration = tonumber(holdInput.Text) or 2
+
+	task.spawn(function()
+		while isMoving do
+			for i, targetPos in ipairs(validPoints) do
+				if not isMoving then break end
+				
+				-- 1. Движение к точке
+				if i == 1 and not currentTween then
+					rootPart.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+				else
+					local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+					currentTween = TweenService:Create(rootPart, tweenInfo, {CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))})
+					currentTween:Play()
+					currentTween.Completed:Wait()
+				end
+				
+				-- 2. Взаимодействие (Нажатие E)
+				if useInteraction and isMoving then
+					startBtn.Text = "НАЖИМАЮ E..."
+					-- Симуляция зажатия
+					VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+					
+					task.wait(holdDuration)
+					
+					-- Симуляция отпускания
+					VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+					startBtn.Text = "СТОП"
+				end
+				
+				task.wait(0.2)
+			end
+			
+			if not isLooping then stopMoving(); break end
+		end
+	end)
+end)
+
+RunService.RenderStepped:Connect(function()
+	posLabel.Text = string.format("Позиция: %.1f, %.1f, %.1f", rootPart.Position.X, rootPart.Position.Y, rootPart.Position.Z)
+end)
