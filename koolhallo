@@ -1,44 +1,81 @@
 -- Службы
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local rootPart = character:WaitForChild("HumanoidRootPart")
 
+-- Состояние
+local isLooping = false
+local currentTween = nil
+local isMoving = false
+
 -- Создание GUI
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "TestTeleportGui"
+screenGui.Name = "TestTeleportGuiV2"
+screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 300, 0, 350)
-mainFrame.Position = UDim2.new(0, 50, 0.5, -175)
-mainFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+mainFrame.Size = UDim2.new(0, 300, 0, 420)
+mainFrame.Position = UDim2.new(0.5, -150, 0.5, -210)
+mainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 mainFrame.BorderSizePixel = 0
+mainFrame.Active = true -- Нужно для перетаскивания
 mainFrame.Parent = screenGui
 
 local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(0, 10)
 corner.Parent = mainFrame
 
--- Заголовок и текущая позиция
+-- === ЛОГИКА ПЕРЕТАСКИВАНИЯ (DRAGGABLE) ===
+local dragging, dragInput, dragStart, startPos
+
+mainFrame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		startPos = mainFrame.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+mainFrame.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end)
+
+-- === ЭЛЕМЕНТЫ ИНТЕРФЕЙСА ===
+
 local posLabel = Instance.new("TextLabel")
 posLabel.Size = UDim2.new(1, 0, 0, 40)
-posLabel.Text = "Ваша позиция: 0, 0, 0"
+posLabel.Text = "Позиция: 0, 0, 0"
 posLabel.TextColor3 = Color3.new(1, 1, 1)
 posLabel.BackgroundTransparency = 1
 posLabel.Parent = mainFrame
 
--- Функция для создания полей ввода
 local function createInput(placeholder, yPos)
     local input = Instance.new("TextBox")
     input.Size = UDim2.new(0.8, 0, 0, 30)
     input.Position = UDim2.new(0.1, 0, 0, yPos)
     input.PlaceholderText = placeholder
     input.Text = ""
-    input.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    input.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     input.TextColor3 = Color3.new(1, 1, 1)
     input.Parent = mainFrame
     return input
@@ -47,76 +84,112 @@ end
 local inputPos1 = createInput("Точка А (X, Y, Z)", 60)
 local inputPos2 = createInput("Точка B (X, Y, Z)", 100)
 
--- Кнопки "Взять текущие координаты"
-local function createGetBtn(text, yPos, targetInput)
+local function createBtn(text, yPos, color)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.8, 0, 0, 25)
+    btn.Size = UDim2.new(0.8, 0, 0, 30)
     btn.Position = UDim2.new(0.1, 0, 0, yPos)
     btn.Text = text
-    btn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+    btn.BackgroundColor3 = color
     btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.AutoButtonColor = true
     btn.Parent = mainFrame
-    
-    btn.MouseButton1Click:Connect(function()
-        local pos = rootPart.Position
-        targetInput.Text = string.format("%.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z)
-    end)
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
     return btn
 end
 
-createGetBtn("Записать точку А", 140, inputPos1)
-createGetBtn("Записать точку B", 175, inputPos2)
+local btnGetA = createBtn("Взять координаты А", 140, Color3.fromRGB(0, 100, 180))
+local btnGetB = createBtn("Взять координаты B", 175, Color3.fromRGB(0, 100, 180))
 
--- Поле для скорости
-local speedInput = createInput("Скорость перемещения (сек)", 220)
-speedInput.Text = "2" -- По умолчанию 2 секунды
+-- Кнопка цикла
+local loopBtn = createBtn("Бесконечно: ВЫКЛ", 220, Color3.fromRGB(100, 100, 100))
 
--- Кнопка СТАРТ
-local startBtn = Instance.new("TextButton")
-startBtn.Size = UDim2.new(0.8, 0, 0, 40)
-startBtn.Position = UDim2.new(0.1, 0, 0, 270)
-startBtn.Text = "ПОЕХАЛИ!"
-startBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
-startBtn.TextColor3 = Color3.new(1, 1, 1)
+-- Поле скорости
+local speedInput = createInput("Время пути (сек)", 265)
+speedInput.Text = "2"
+
+-- Кнопка Старт/Стоп
+local startBtn = createBtn("ПУСК", 320, Color3.fromRGB(0, 150, 70))
+startBtn.Size = UDim2.new(0.8, 0, 0, 50)
 startBtn.Font = Enum.Font.SourceSansBold
-startBtn.TextSize = 20
-startBtn.Parent = mainFrame
+startBtn.TextSize = 22
 
--- Обновление координат игрока в реальном времени
-RunService.RenderStepped:Connect(function()
-    local pos = rootPart.Position
-    posLabel.Text = string.format("Позиция: %.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z)
-end)
+-- === ЛОГИКА ТЕЛЕПОРТАЦИИ ===
 
--- Логика перемещения
 local function parseCoords(str)
     local coords = {}
     for val in string.gmatch(str, "([^,]+)") do
         table.insert(coords, tonumber(val))
     end
-    if #coords == 3 then
-        return Vector3.new(coords[1], coords[2], coords[3])
-    end
-    return nil
+    return #coords == 3 and Vector3.new(coords[1], coords[2], coords[3]) or nil
+end
+
+-- Обновление текста позиции
+RunService.RenderStepped:Connect(function()
+    local pos = rootPart.Position
+posLabel.Text = string.format("Позиция: %.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z)
+end)
+
+btnGetA.MouseButton1Click:Connect(function()
+    inputPos1.Text = string.format("%.1f, %.1f, %.1f", rootPart.Position.X, rootPart.Position.Y, rootPart.Position.Z)
+end)
+
+btnGetB.MouseButton1Click:Connect(function()
+    inputPos2.Text = string.format("%.1f, %.1f, %.1f", rootPart.Position.X, rootPart.Position.Y, rootPart.Position.Z)
+end)
+
+loopBtn.MouseButton1Click:Connect(function()
+    isLooping = not isLooping
+    loopBtn.Text = isLooping and "Бесконечно: ВКЛ" or "Бесконечно: ВЫКЛ"
+    loopBtn.BackgroundColor3 = isLooping and Color3.fromRGB(180, 100, 0) or Color3.fromRGB(100, 100, 100)
+end)
+
+local function stopMoving()
+    isMoving = false
+    if currentTween then currentTween:Cancel() end
+    startBtn.Text = "ПУСК"
+    startBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 70)
 end
 
 startBtn.MouseButton1Click:Connect(function()
+    if isMoving then
+        stopMoving()
+        return
+    end
+    
     local startPos = parseCoords(inputPos1.Text)
     local endPos = parseCoords(inputPos2.Text)
     local duration = tonumber(speedInput.Text) or 2
-
-    if startPos and endPos then
-        -- 1. Сначала мгновенно переносим в точку А
-        rootPart.CFrame = CFrame.new(startPos + Vector3.new(0, 3, 0))
-        
-        -- 2. Плавно перемещаем в точку B
-        local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
-        local tween = TweenService:Create(rootPart, tweenInfo, {CFrame = CFrame.new(endPos + Vector3.new(0, 3, 0))})
-        
-        tween:Play()
-    else
+    
+    if not startPos or not endPos then
         startBtn.Text = "Ошибка координат!"
         task.wait(1)
-        startBtn.Text = "ПОЕХАЛИ!"
+        startBtn.Text = "ПУСК"
+        return
     end
+
+    isMoving = true
+    startBtn.Text = "СТОП"
+    startBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+
+    task.spawn(function()
+        while isMoving do
+            -- 1. ТП в точку А
+            rootPart.CFrame = CFrame.new(startPos + Vector3.new(0, 3, 0))
+            task.wait(0.1)
+            
+            -- 2. Плавное движение в Б
+            local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+            currentTween = TweenService:Create(rootPart, tweenInfo, {CFrame = CFrame.new(endPos + Vector3.new(0, 3, 0))})
+            currentTween:Play()
+            
+            currentTween.Completed:Wait() -- Ждем окончания полета
+            
+            -- Если цикл выключен, останавливаемся
+            if not isLooping then
+                stopMoving()
+                break
+            end
+            task.wait(0.5) -- Небольшая пауза перед повтором
+        end
+    end)
 end)
