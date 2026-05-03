@@ -9,50 +9,34 @@ local character = player.Character or player.CharacterAdded:Wait()
 local rootPart = character:WaitForChild("HumanoidRootPart")
 
 -- Состояние
+local pointsList = {} -- Список таблиц с UI элементами точек
 local isLooping = false
-local currentTween = nil
 local isMoving = false
+local currentTween = nil
 
 -- Создание GUI
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "TestTeleportGuiV2"
+screenGui.Name = "RouteTesterGui"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 300, 0, 420)
-mainFrame.Position = UDim2.new(0.5, -150, 0.5, -210)
-mainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-mainFrame.BorderSizePixel = 0
-mainFrame.Active = true -- Нужно для перетаскивания
+mainFrame.Size = UDim2.new(0, 350, 0, 450)
+mainFrame.Position = UDim2.new(0.5, -175, 0.5, -225)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+mainFrame.Active = true
 mainFrame.Parent = screenGui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 10)
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 10)
-corner.Parent = mainFrame
-
--- === ЛОГИКА ПЕРЕТАСКИВАНИЯ (DRAGGABLE) ===
+-- === ПЕРЕТАСКИВАНИЕ ===
 local dragging, dragInput, dragStart, startPos
-
 mainFrame.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		dragging = true
-		dragStart = input.Position
-		startPos = mainFrame.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				dragging = false
-			end
-		end)
+		dragging = true; dragStart = input.Position; startPos = mainFrame.Position
+		input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
 	end
 end)
-
-mainFrame.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement then
-		dragInput = input
-	end
-end)
-
+mainFrame.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end end)
 UserInputService.InputChanged:Connect(function(input)
 	if input == dragInput and dragging then
 		local delta = input.Position - dragStart
@@ -61,135 +45,188 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 -- === ЭЛЕМЕНТЫ ИНТЕРФЕЙСА ===
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(1, 0, 0, 40)
+title.Text = "МАРШРУТНЫЙ ТЕСТЕР"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.SourceSansBold
+title.BackgroundTransparency = 1
 
-local posLabel = Instance.new("TextLabel")
-posLabel.Size = UDim2.new(1, 0, 0, 40)
+local posLabel = Instance.new("TextLabel", mainFrame)
+posLabel.Size = UDim2.new(1, 0, 0, 20)
+posLabel.Position = UDim2.new(0, 0, 0, 35)
 posLabel.Text = "Позиция: 0, 0, 0"
-posLabel.TextColor3 = Color3.new(1, 1, 1)
+posLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 posLabel.BackgroundTransparency = 1
-posLabel.Parent = mainFrame
 
-local function createInput(placeholder, yPos)
-    local input = Instance.new("TextBox")
-    input.Size = UDim2.new(0.8, 0, 0, 30)
-    input.Position = UDim2.new(0.1, 0, 0, yPos)
-    input.PlaceholderText = placeholder
-    input.Text = ""
-    input.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    input.TextColor3 = Color3.new(1, 1, 1)
-    input.Parent = mainFrame
-    return input
-end
+-- Контейнер для списка (ScrollingFrame)
+local scrollFrame = Instance.new("ScrollingFrame", mainFrame)
+scrollFrame.Size = UDim2.new(0.9, 0, 0, 200)
+scrollFrame.Position = UDim2.new(0.05, 0, 0, 70)
+scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+scrollFrame.ScrollBarThickness = 6
 
-local inputPos1 = createInput("Точка А (X, Y, Z)", 60)
-local inputPos2 = createInput("Точка B (X, Y, Z)", 100)
+local layout = Instance.new("UIListLayout", scrollFrame)
+layout.Padding = UDim.new(0, 5)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
 
-local function createBtn(text, yPos, color)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.8, 0, 0, 30)
-    btn.Position = UDim2.new(0.1, 0, 0, yPos)
-    btn.Text = text
-    btn.BackgroundColor3 = color
-    btn.TextColor3 = Color3.new(1, 1, 1)
-    btn.AutoButtonColor = true
-    btn.Parent = mainFrame
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
-    return btn
-end
+-- Кнопки управления под списком
+local addPointBtn = Instance.new("TextButton", mainFrame)
+addPointBtn.Size = UDim2.new(0.9, 0, 0, 30)
+addPointBtn.Position = UDim2.new(0.05, 0, 0, 280)
+addPointBtn.Text = "+ Добавить точку"
+addPointBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+addPointBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", addPointBtn)
 
-local btnGetA = createBtn("Взять координаты А", 140, Color3.fromRGB(0, 100, 180))
-local btnGetB = createBtn("Взять координаты B", 175, Color3.fromRGB(0, 100, 180))
-
--- Кнопка цикла
-local loopBtn = createBtn("Бесконечно: ВЫКЛ", 220, Color3.fromRGB(100, 100, 100))
-
--- Поле скорости
-local speedInput = createInput("Время пути (сек)", 265)
+local speedInput = Instance.new("TextBox", mainFrame)
+speedInput.Size = UDim2.new(0.4, 0, 0, 30)
+speedInput.Position = UDim2.new(0.05, 0, 0, 320)
+speedInput.PlaceholderText = "Время (сек)"
 speedInput.Text = "2"
+speedInput.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+speedInput.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", speedInput)
 
--- Кнопка Старт/Стоп
-local startBtn = createBtn("ПУСК", 320, Color3.fromRGB(0, 150, 70))
-startBtn.Size = UDim2.new(0.8, 0, 0, 50)
+local loopBtn = Instance.new("TextButton", mainFrame)
+loopBtn.Size = UDim2.new(0.45, 0, 0, 30)
+loopBtn.Position = UDim2.new(0.5, 0, 0, 320)
+loopBtn.Text = "Цикл: ВЫКЛ"
+loopBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+loopBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", loopBtn)
+
+local startBtn = Instance.new("TextButton", mainFrame)
+startBtn.Size = UDim2.new(0.9, 0, 0, 50)
+startBtn.Position = UDim2.new(0.05, 0, 0, 370)
+startBtn.Text = "ЗАПУСТИТЬ МАРШРУТ"
+startBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 70)
+startBtn.TextColor3 = Color3.new(1, 1, 1)
 startBtn.Font = Enum.Font.SourceSansBold
-startBtn.TextSize = 22
+startBtn.TextSize = 20
+Instance.new("UICorner", startBtn)
 
--- === ЛОГИКА ТЕЛЕПОРТАЦИИ ===
+-- === ФУНКЦИИ ===
 
 local function parseCoords(str)
-    local coords = {}
-    for val in string.gmatch(str, "([^,]+)") do
-        table.insert(coords, tonumber(val))
-    end
-    return #coords == 3 and Vector3.new(coords[1], coords[2], coords[3]) or nil
+	local coords = {}
+	for val in string.gmatch(str, "([^,]+)") do table.insert(coords, tonumber(val)) end
+	return #coords == 3 and Vector3.new(coords[1], coords[2], coords[3]) or nil
 end
 
--- Обновление текста позиции
-RunService.RenderStepped:Connect(function()
-    local pos = rootPart.Position
-posLabel.Text = string.format("Позиция: %.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z)
-end)
+local function createPointRow()
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(1, -10, 0, 35)
+	frame.BackgroundTransparency = 1
+	frame.Parent = scrollFrame
+	
+	local input = Instance.new("TextBox", frame)
+	input.Size = UDim2.new(0.55, 0, 1, 0)
+	input.PlaceholderText = "X, Y, Z"
+	input.Text = ""
+	input.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	input.TextColor3 = Color3.new(1, 1, 1)
+	input.TextScaled = true
+	
+	local getBtn = Instance.new("TextButton", frame)
+	getBtn.Size = UDim2.new(0.25, 0, 1, 0)
+	getBtn.Position = UDim2.new(0.57, 0, 0, 0)
+	getBtn.Text = "Тут"
+	getBtn.BackgroundColor3 = Color3.fromRGB(0, 85, 127)
+	getBtn.TextColor3 = Color3.new(1, 1, 1)
+	
+	local delBtn = Instance.new("TextButton", frame)
+	delBtn.Size = UDim2.new(0.15, 0, 1, 0)
+	delBtn.Position = UDim2.new(0.84, 0, 0, 0)
+	delBtn.Text = "X"
+	delBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+	delBtn.TextColor3 = Color3.new(1, 1, 1)
 
-btnGetA.MouseButton1Click:Connect(function()
-    inputPos1.Text = string.format("%.1f, %.1f, %.1f", rootPart.Position.X, rootPart.Position.Y, rootPart.Position.Z)
-end)
+	local entry = {Frame = frame, Input = input}
+	table.insert(pointsList, entry)
 
-btnGetB.MouseButton1Click:Connect(function()
-    inputPos2.Text = string.format("%.1f, %.1f, %.1f", rootPart.Position.X, rootPart.Position.Y, rootPart.Position.Z)
-end)
+	getBtn.MouseButton1Click:Connect(function()
+		input.Text = string.format("%.1f, %.1f, %.1f", rootPart.Position.X, rootPart.Position.Y, rootPart.Position.Z)
+	end)
+
+	delBtn.MouseButton1Click:Connect(function()
+		for i, v in ipairs(pointsList) do
+			if v == entry then table.remove(pointsList, i) break end
+		end
+		frame:Destroy()
+		scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y)
+	end)
+	
+	scrollFrame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y)
+end
+
+-- Инициализация двумя точками
+createPointRow()
+createPointRow()
+
+addPointBtn.MouseButton1Click:Connect(createPointRow)
 
 loopBtn.MouseButton1Click:Connect(function()
-    isLooping = not isLooping
-    loopBtn.Text = isLooping and "Бесконечно: ВКЛ" or "Бесконечно: ВЫКЛ"
-    loopBtn.BackgroundColor3 = isLooping and Color3.fromRGB(180, 100, 0) or Color3.fromRGB(100, 100, 100)
+	isLooping = not isLooping
+	loopBtn.Text = isLooping and "Цикл: ВКЛ" or "Цикл: ВЫКЛ"
+	loopBtn.BackgroundColor3 = isLooping and Color3.fromRGB(180, 100, 0) or Color3.fromRGB(100, 100, 100)
 end)
 
 local function stopMoving()
-    isMoving = false
-    if currentTween then currentTween:Cancel() end
-    startBtn.Text = "ПУСК"
-    startBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 70)
+	isMoving = false
+	if currentTween then currentTween:Cancel() end
+	startBtn.Text = "ЗАПУСТИТЬ МАРШРУТ"
+	startBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 70)
 end
 
 startBtn.MouseButton1Click:Connect(function()
-    if isMoving then
-        stopMoving()
-        return
-    end
-    
-    local startPos = parseCoords(inputPos1.Text)
-    local endPos = parseCoords(inputPos2.Text)
-    local duration = tonumber(speedInput.Text) or 2
-    
-    if not startPos or not endPos then
-        startBtn.Text = "Ошибка координат!"
-        task.wait(1)
-        startBtn.Text = "ПУСК"
-        return
-    end
+	if isMoving then stopMoving() return end
+	
+	local validPoints = {}
+	for _, entry in ipairs(pointsList) do
+		local pos = parseCoords(entry.Input.Text)
+		if pos then table.insert(validPoints, pos) end
+	end
+	
+	if #validPoints < 2 then
+		startBtn.Text = "Нужно минимум 2 точки!"
+		task.wait(1.5)
+		startBtn.Text = "ЗАПУСТИТЬ МАРШРУТ"
+		return
+	end
 
-    isMoving = true
-    startBtn.Text = "СТОП"
-    startBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+	isMoving = true
+	startBtn.Text = "СТОП"
+	startBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+	
+	local duration = tonumber(speedInput.Text) or 2
 
-    task.spawn(function()
-        while isMoving do
-            -- 1. ТП в точку А
-            rootPart.CFrame = CFrame.new(startPos + Vector3.new(0, 3, 0))
-            task.wait(0.1)
-            
-            -- 2. Плавное движение в Б
-            local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
-            currentTween = TweenService:Create(rootPart, tweenInfo, {CFrame = CFrame.new(endPos + Vector3.new(0, 3, 0))})
-            currentTween:Play()
-            
-            currentTween.Completed:Wait() -- Ждем окончания полета
-            
-            -- Если цикл выключен, останавливаемся
-            if not isLooping then
-                stopMoving()
-                break
-            end
-            task.wait(0.5) -- Небольшая пауза перед повтором
-        end
-    end)
+	task.spawn(function()
+		while isMoving do
+			for i, targetPos in ipairs(validPoints) do
+				if not isMoving then break end
+				
+				if i == 1 and not currentTween then
+					-- Если это самое начало, просто телепортируемся к первой точке
+					rootPart.CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))
+				else
+					-- Плавно летим к следующей точке
+					local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+					currentTween = TweenService:Create(rootPart, tweenInfo, {CFrame = CFrame.new(targetPos + Vector3.new(0, 3, 0))})
+					currentTween:Play()
+					currentTween.Completed:Wait()
+				end
+			end
+			
+			if not isLooping then
+				stopMoving()
+				break
+			end
+		end
+	end)
+end)
+
+RunService.RenderStepped:Connect(function()
+	posLabel.Text = string.format("Позиция: %.1f, %.1f, %.1f", rootPart.Position.X, rootPart.Position.Y, rootPart.Position.Z)
 end)
