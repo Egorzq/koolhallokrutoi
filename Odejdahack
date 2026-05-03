@@ -1,0 +1,123 @@
+-- LocalOutfitLoader (ТОЛЬКО ЛОКАЛЬНО)
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local InsertService = game:GetService("InsertService") -- Может не работать локально для всех ID
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
+-- Создание GUI
+local screenGui = Instance.new("ScreenGui", player.PlayerGui)
+screenGui.Name = "LocalOutfitGui"
+screenGui.ResetOnSpawn = false
+
+local mainFrame = Instance.new("Frame", screenGui)
+mainFrame.Size = UDim2.new(0, 300, 0, 450)
+mainFrame.Position = UDim2.new(0.5, -150, 0.1, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(35, 25, 35) -- Фиолетовый оттенок для отличия
+mainFrame.Active = true
+Instance.new("UICorner", mainFrame)
+
+-- === ЛОГИКА ПЕРЕТАСКИВАНИЯ ===
+local dragging, dragInput, dragStart, startPos
+mainFrame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true; dragStart = input.Position; startPos = mainFrame.Position
+		input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+	end
+end)
+mainFrame.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement then dragInput = input end end)
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end)
+
+-- Заголовок
+local title = Instance.new("TextLabel", mainFrame)
+title.Size = UDim2.new(1, 0, 0, 40); title.Text = "ЛОКАЛЬНАЯ ОДЕЖДА"; title.TextColor3 = Color3.new(1, 1, 1)
+title.Font = Enum.Font.SourceSansBold; title.BackgroundTransparency = 1
+
+-- Поле ввода ID
+local idInput = Instance.new("TextBox", mainFrame)
+idInput.Size = UDim2.new(0.9, 0, 0, 40); idInput.Position = UDim2.new(0.05, 0, 0, 50)
+idInput.PlaceholderText = "Введите Asset ID..."; idInput.Text = ""
+idInput.BackgroundColor3 = Color3.fromRGB(50, 50, 50); idInput.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", idInput)
+
+-- Список надетых вещей
+local scrollFrame = Instance.new("ScrollingFrame", mainFrame)
+scrollFrame.Size = UDim2.new(0.9, 0, 0, 220); scrollFrame.Position = UDim2.new(0.05, 0, 0, 200)
+scrollFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45); scrollFrame.ScrollBarThickness = 4
+local layout = Instance.new("UIListLayout", scrollFrame); layout.Padding = UDim.new(0, 5)
+
+-- Функция добавления в список GUI
+local function addItemToList(name, obj)
+	local itemFrame = Instance.new("Frame", scrollFrame)
+	itemFrame.Size = UDim2.new(1, -10, 0, 30); itemFrame.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+	Instance.new("UICorner", itemFrame)
+	
+	local itemText = Instance.new("TextLabel", itemFrame)
+	itemText.Size = UDim2.new(0.7, 0, 1, 0); itemText.Position = UDim2.new(0.05, 0, 0, 0)
+	itemText.Text = name; itemText.TextColor3 = Color3.new(1, 1, 1); itemText.BackgroundTransparency = 1; itemText.TextXAlignment = Enum.TextXAlignment.Left
+	
+	local delBtn = Instance.new("TextButton", itemFrame)
+	delBtn.Size = UDim2.new(0.2, 0, 0.8, 0); delBtn.Position = UDim2.new(0.75, 0, 0.1, 0)
+	delBtn.Text = "X"; delBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50); delBtn.TextColor3 = Color3.new(1, 1, 1)
+	Instance.new("UICorner", delBtn)
+	
+	delBtn.MouseButton1Click:Connect(function()
+		obj:Destroy()
+		itemFrame:Destroy()
+	end)
+end
+
+-- ЛОКАЛЬНАЯ ЛОГИКА НАДЕВАНИЯ
+local function applyLocal(category)
+	local id = tonumber(idInput.Text)
+	if not id then return end
+	
+	local char = player.Character
+	if not char then return end
+
+	if category == "Shirt" then
+		local s = char:FindFirstChildOfClass("Shirt") or Instance.new("Shirt", char)
+		s.ShirtTemplate = "http://www.roblox.com/asset/?id=" .. id
+		addItemToList("Shirt: "..id, s)
+	elseif category == "Pants" then
+local p = char:FindFirstChildOfClass("Pants") or Instance.new("Pants", char)
+		p.PantsTemplate = "http://www.roblox.com/asset/?id=" .. id
+		addItemToList("Pants: "..id, p)
+	elseif category == "Accessory" then
+		-- Важно: Локальные скрипты не могут использовать InsertService для большинства вещей из-за безопасности.
+		-- Мы будем использовать специальный объект Accessory и меш.
+		local acc = Instance.new("Accessory")
+		local handle = Instance.new("Part", acc); handle.Name = "Handle"
+		local mesh = Instance.new("SpecialMesh", handle)
+		mesh.MeshId = "rbxassetid://" .. id
+		-- Это упрощенный метод, настоящие аксессуары требуют сложной структуры. 
+		-- Для полноценных аксессуаров лучше использовать серверный метод.
+		acc.Parent = char
+		addItemToList("Acc: "..id, acc)
+	end
+end
+
+-- Кнопки
+local btnS = Instance.new("TextButton", mainFrame)
+btnS.Size = UDim2.new(0.28, 0, 0, 35); btnS.Position = UDim2.new(0.05, 0, 0, 100)
+btnS.Text = "Футболка"; btnS.BackgroundColor3 = Color3.fromRGB(100, 100, 200); btnS.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", btnS)
+btnS.MouseButton1Click:Connect(function() applyLocal("Shirt") end)
+
+local btnP = Instance.new("TextButton", mainFrame)
+btnP.Size = UDim2.new(0.28, 0, 0, 35); btnP.Position = UDim2.new(0.36, 0, 0, 100)
+btnP.Text = "Штаны"; btnP.BackgroundColor3 = Color3.fromRGB(100, 200, 100); btnP.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", btnP)
+btnP.MouseButton1Click:Connect(function() applyLocal("Pants") end)
+
+local btnA = Instance.new("TextButton", mainFrame)
+btnA.Size = UDim2.new(0.28, 0, 0, 35); btnA.Position = UDim2.new(0.67, 0, 0, 100)
+btnA.Text = "Аксесс."; btnA.BackgroundColor3 = Color3.fromRGB(200, 100, 100); btnA.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", btnA)
+btnA.MouseButton1Click:Connect(function() applyLocal("Accessory") end)
