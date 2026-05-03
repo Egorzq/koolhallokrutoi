@@ -1,0 +1,122 @@
+-- Службы
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+-- Создание GUI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "TestTeleportGui"
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 300, 0, 350)
+mainFrame.Position = UDim2.new(0, 50, 0.5, -175)
+mainFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 10)
+corner.Parent = mainFrame
+
+-- Заголовок и текущая позиция
+local posLabel = Instance.new("TextLabel")
+posLabel.Size = UDim2.new(1, 0, 0, 40)
+posLabel.Text = "Ваша позиция: 0, 0, 0"
+posLabel.TextColor3 = Color3.new(1, 1, 1)
+posLabel.BackgroundTransparency = 1
+posLabel.Parent = mainFrame
+
+-- Функция для создания полей ввода
+local function createInput(placeholder, yPos)
+    local input = Instance.new("TextBox")
+    input.Size = UDim2.new(0.8, 0, 0, 30)
+    input.Position = UDim2.new(0.1, 0, 0, yPos)
+    input.PlaceholderText = placeholder
+    input.Text = ""
+    input.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    input.TextColor3 = Color3.new(1, 1, 1)
+    input.Parent = mainFrame
+    return input
+end
+
+local inputPos1 = createInput("Точка А (X, Y, Z)", 60)
+local inputPos2 = createInput("Точка B (X, Y, Z)", 100)
+
+-- Кнопки "Взять текущие координаты"
+local function createGetBtn(text, yPos, targetInput)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.8, 0, 0, 25)
+    btn.Position = UDim2.new(0.1, 0, 0, yPos)
+    btn.Text = text
+    btn.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Parent = mainFrame
+    
+    btn.MouseButton1Click:Connect(function()
+        local pos = rootPart.Position
+        targetInput.Text = string.format("%.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z)
+    end)
+    return btn
+end
+
+createGetBtn("Записать точку А", 140, inputPos1)
+createGetBtn("Записать точку B", 175, inputPos2)
+
+-- Поле для скорости
+local speedInput = createInput("Скорость перемещения (сек)", 220)
+speedInput.Text = "2" -- По умолчанию 2 секунды
+
+-- Кнопка СТАРТ
+local startBtn = Instance.new("TextButton")
+startBtn.Size = UDim2.new(0.8, 0, 0, 40)
+startBtn.Position = UDim2.new(0.1, 0, 0, 270)
+startBtn.Text = "ПОЕХАЛИ!"
+startBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
+startBtn.TextColor3 = Color3.new(1, 1, 1)
+startBtn.Font = Enum.Font.SourceSansBold
+startBtn.TextSize = 20
+startBtn.Parent = mainFrame
+
+-- Обновление координат игрока в реальном времени
+RunService.RenderStepped:Connect(function()
+    local pos = rootPart.Position
+    posLabel.Text = string.format("Позиция: %.1f, %.1f, %.1f", pos.X, pos.Y, pos.Z)
+end)
+
+-- Логика перемещения
+local function parseCoords(str)
+    local coords = {}
+    for val in string.gmatch(str, "([^,]+)") do
+        table.insert(coords, tonumber(val))
+    end
+    if #coords == 3 then
+        return Vector3.new(coords[1], coords[2], coords[3])
+    end
+    return nil
+end
+
+startBtn.MouseButton1Click:Connect(function()
+    local startPos = parseCoords(inputPos1.Text)
+    local endPos = parseCoords(inputPos2.Text)
+    local duration = tonumber(speedInput.Text) or 2
+
+    if startPos and endPos then
+        -- 1. Сначала мгновенно переносим в точку А
+        rootPart.CFrame = CFrame.new(startPos + Vector3.new(0, 3, 0))
+        
+        -- 2. Плавно перемещаем в точку B
+        local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+        local tween = TweenService:Create(rootPart, tweenInfo, {CFrame = CFrame.new(endPos + Vector3.new(0, 3, 0))})
+        
+        tween:Play()
+    else
+        startBtn.Text = "Ошибка координат!"
+        task.wait(1)
+        startBtn.Text = "ПОЕХАЛИ!"
+    end
+end)
