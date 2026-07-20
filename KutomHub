@@ -50,20 +50,17 @@ mainFrame.ClipsDescendants = true
 mainFrame.Visible = false
 mainFrame.Parent = sgui
 
--- === НОВЫЙ ФОН С КАРТИНКОЙ ===
+-- === ФОН С КАРТИНКОЙ ===
 local bgImage = Instance.new("ImageLabel")
 bgImage.Size = UDim2.new(1, 0, 1, 0)
 bgImage.BackgroundTransparency = 1
-bgImage.Image = "rbxassetid://124115730204552"
-bgImage.ImageTransparency = 0.5 -- Прозрачность 50%
-bgImage.ScaleType = Enum.ScaleType.Crop -- Красивое заполнение без сплющивания
-bgImage.ZIndex = 0 -- Опускаем под все остальные элементы
+bgImage.Image = "rbxassetid://78674775572446" -- НОВЫЙ ФОН
+bgImage.ImageTransparency = 0.5
+bgImage.ScaleType = Enum.ScaleType.Crop 
+bgImage.ZIndex = 0 
 bgImage.Parent = mainFrame
-
-local bgCorner = Instance.new("UICorner")
-bgCorner.CornerRadius = UDim.new(0, 12)
-bgCorner.Parent = bgImage
--- =============================
+local bgCorner = Instance.new("UICorner") bgCorner.CornerRadius = UDim.new(0, 12) bgCorner.Parent = bgImage
+-- ========================
 
 local mainStroke = Instance.new("UIStroke")
 mainStroke.Thickness = 2
@@ -71,9 +68,7 @@ mainStroke.Transparency = 1
 mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 mainStroke.Parent = mainFrame
 
-local mainCorner = Instance.new("UICorner")
-mainCorner.CornerRadius = UDim.new(0, 12)
-mainCorner.Parent = mainFrame
+local mainCorner = Instance.new("UICorner") mainCorner.CornerRadius = UDim.new(0, 12) mainCorner.Parent = mainFrame
 
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -80, 0, 40) 
@@ -82,7 +77,7 @@ title.TextXAlignment = Enum.TextXAlignment.Left
 title.BackgroundTransparency = 1
 title.Font = Enum.Font.GothamBlack
 title.TextSize = 16
-title.Text = "✨Kutom Hub✨"
+title.Text = "✨Kutom Hub✨" -- НОВОЕ НАЗВАНИЕ
 title.Parent = mainFrame
 
 local closeBtn = Instance.new("TextButton")
@@ -261,15 +256,13 @@ local movementLayout = Instance.new("UIListLayout") movementLayout.SortOrder = E
 
 -- ЛОГИКА ПЕРЕКЛЮЧЕНИЯ ВКЛАДОК
 tabEmotesBtn.MouseButton1Click:Connect(function()
-    emotesScroll.Visible = true
-    movementScroll.Visible = false
+    emotesScroll.Visible = true movementScroll.Visible = false
     TweenService:Create(tabEmotesBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(40, 40, 50), TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
     TweenService:Create(tabMovementBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(25, 25, 30), TextColor3 = Color3.fromRGB(150, 150, 150)}):Play()
 end)
 
 tabMovementBtn.MouseButton1Click:Connect(function()
-    emotesScroll.Visible = false
-    movementScroll.Visible = true
+    emotesScroll.Visible = false movementScroll.Visible = true
     TweenService:Create(tabMovementBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(40, 40, 50), TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
     TweenService:Create(tabEmotesBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(25, 25, 30), TextColor3 = Color3.fromRGB(150, 150, 150)}):Play()
 end)
@@ -279,22 +272,60 @@ end)
 -- ==========================================
 local topPadding = Instance.new("Frame") topPadding.Size = UDim2.new(1, 0, 0, 2) topPadding.BackgroundTransparency = 1 topPadding.LayoutOrder = 0 topPadding.Parent = emotesScroll
 
+-- Переменная для контроля повтора (по умолчанию 1 раз)
+local isAnimLooped = false
+
+-- КНОПКА ПЕРЕКЛЮЧЕНИЯ ПОВТОРА
+local loopToggleBtn = Instance.new("TextButton")
+loopToggleBtn.Size = UDim2.new(1, -10, 0, 38)
+loopToggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70) 
+loopToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+loopToggleBtn.Text = "🔁 Повтор: 1 РАЗ"
+loopToggleBtn.Font = Enum.Font.GothamBold
+loopToggleBtn.TextSize = 14
+loopToggleBtn.AutoButtonColor = false
+loopToggleBtn.LayoutOrder = 1
+loopToggleBtn.Parent = emotesScroll
+local loopCorner = Instance.new("UICorner") loopCorner.CornerRadius = UDim.new(0, 8) loopCorner.Parent = loopToggleBtn
+local loopStroke = Instance.new("UIStroke") loopStroke.Color = Color3.fromRGB(100, 100, 120) loopStroke.Thickness = 1 loopStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border loopStroke.Parent = loopToggleBtn
+
+loopToggleBtn.MouseButton1Click:Connect(function()
+    isAnimLooped = not isAnimLooped
+    if isAnimLooped then
+        TweenService:Create(loopToggleBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(40, 160, 60)}):Play()
+        loopToggleBtn.Text = "🔁 Повтор: БЕСКОНЕЧНО"
+        loopStroke.Color = Color3.fromRGB(80, 200, 100)
+    else
+        TweenService:Create(loopToggleBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 60, 70)}):Play()
+        loopToggleBtn.Text = "🔁 Повтор: 1 РАЗ"
+        loopStroke.Color = Color3.fromRGB(100, 100, 120)
+    end
+    
+    if currentAnimTrack then
+        currentAnimTrack.Looped = isAnimLooped
+    end
+end)
+
 local function playAnim(animId)
     local character = player.Character
     if not character then return end
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if not humanoid then return end
     local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+    
     if currentAnimTrack then currentAnimTrack:Stop() end
+    
     local idToPlay = animId
     if not string.match(idToPlay, "^rbxassetid://") then idToPlay = "rbxassetid://" .. idToPlay end
     local animation = Instance.new("Animation") animation.AnimationId = idToPlay
+    
     currentAnimTrack = animator:LoadAnimation(animation)
+    currentAnimTrack.Looped = isAnimLooped
     currentAnimTrack:Play()
 end
 
 local function createButton(name, id, isSpecial, order)
-    local btn = Instance.new("TextButton") btn.Size = UDim2.new(1, -10, 0, 38) btn.LayoutOrder = order or 1 
+    local btn = Instance.new("TextButton") btn.Size = UDim2.new(1, -10, 0, 38) btn.LayoutOrder = order or 2
     local defaultColor = isSpecial and Color3.fromRGB(40, 160, 60) or Color3.fromRGB(40, 40, 50)
     local hoverColor = isSpecial and Color3.fromRGB(60, 200, 80) or Color3.fromRGB(60, 60, 80)
     btn.BackgroundColor3 = defaultColor btn.TextColor3 = Color3.fromRGB(230, 230, 230) btn.Text = name btn.Font = Enum.Font.GothamSemibold btn.TextSize = 14 btn.AutoButtonColor = false btn.Parent = emotesScroll
@@ -309,7 +340,7 @@ local function createButton(name, id, isSpecial, order)
 end
 
 local function createCustomButton(name, id)
-    local container = Instance.new("Frame") container.Size = UDim2.new(1, -10, 0, 38) container.BackgroundTransparency = 1 container.LayoutOrder = 2 container.Parent = emotesScroll
+    local container = Instance.new("Frame") container.Size = UDim2.new(1, -10, 0, 38) container.BackgroundTransparency = 1 container.LayoutOrder = 3 container.Parent = emotesScroll
     local playBtn = Instance.new("TextButton") playBtn.Size = UDim2.new(1, -44, 1, 0) playBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50) playBtn.TextColor3 = Color3.fromRGB(230, 230, 230) playBtn.Text = "⭐ " .. name playBtn.Font = Enum.Font.GothamSemibold playBtn.TextSize = 14 playBtn.AutoButtonColor = false playBtn.Parent = container
     local corner1 = Instance.new("UICorner") corner1.CornerRadius = UDim.new(0, 8) corner1.Parent = playBtn
     local stroke1 = Instance.new("UIStroke") stroke1.Color = Color3.fromRGB(80, 80, 100) stroke1.Thickness = 1 stroke1.ApplyStrokeMode = Enum.ApplyStrokeMode.Border stroke1.Parent = playBtn
@@ -335,13 +366,13 @@ local function createCustomButton(name, id)
 end
 
 -- Встроенные анимации
-createButton("▶ Take The L", "118343267142519", false, 1) createButton("▶ Смешная Птичка", "118417760427139", false, 1) createButton("▶ Вприсядку", "97148848007002", false, 1) createButton("▶ Смешная Гусеница", "135990691658209", false, 1) createButton("▶ Rat Dance", "117444124506335", false, 1) createButton("▶ Cart", "134980989756407", false, 1)
-createButton("▶ Самолет", "94462256787399", false, 1) createButton("▶ Большой Кутом", "93534084045396", false, 1) createButton("▶ T-Pose", "121655148084031", false, 1) createButton("▶ Ninja Rest", "102129991126923", false, 1) createButton("▶ Zen", "135689691975338", false, 1) createButton("▶ Fling", "93314771373362", false, 1)
-createButton("▶ Backflip", "133675142555339", false, 1) createButton("▶ Вертолет", "76510079095692", false, 1) createButton("▶ Летать", "73980801925168", false, 1) createButton("▶ Хаос", "86806707642727", false, 1)
+createButton("▶ Take The L", "118343267142519", false, 2) createButton("▶ Смешная Птичка", "118417760427139", false, 2) createButton("▶ Вприсядку", "97148848007002", false, 2) createButton("▶ Смешная Гусеница", "135990691658209", false, 2) createButton("▶ Rat Dance", "117444124506335", false, 2) createButton("▶ Cart", "134980989756407", false, 2)
+createButton("▶ Самолет", "94462256787399", false, 2) createButton("▶ Большой Кутом", "93534084045396", false, 2) createButton("▶ T-Pose", "121655148084031", false, 2) createButton("▶ Ninja Rest", "102129991126923", false, 2) createButton("▶ Zen", "135689691975338", false, 2) createButton("▶ Fling", "93314771373362", false, 2)
+createButton("▶ Backflip", "133675142555339", false, 2) createButton("▶ Вертолет", "76510079095692", false, 2) createButton("▶ Летать", "73980801925168", false, 2) createButton("▶ Хаос", "86806707642727", false, 2)
 
 for _, animData in pairs(customAnims) do createCustomButton(animData.name, animData.id) end
 
-local spacer1 = Instance.new("Frame") spacer1.Size = UDim2.new(1, 0, 0, 5) spacer1.BackgroundTransparency = 1 spacer1.LayoutOrder = 3 spacer1.Parent = emotesScroll
+local spacer1 = Instance.new("Frame") spacer1.Size = UDim2.new(1, 0, 0, 5) spacer1.BackgroundTransparency = 1 spacer1.LayoutOrder = 4 spacer1.Parent = emotesScroll
 
 local function createInput(placeholder, order, parent)
     local input = Instance.new("TextBox") input.Size = UDim2.new(1, -10, 0, 38) input.BackgroundColor3 = Color3.fromRGB(15, 15, 20) input.TextColor3 = Color3.fromRGB(255, 255, 255) input.PlaceholderText = placeholder input.Text = "" input.Font = Enum.Font.Gotham input.TextSize = 14 input.LayoutOrder = order input.Parent = parent
@@ -350,10 +381,10 @@ local function createInput(placeholder, order, parent)
     return input
 end
 
-local addNameInput = createInput("Название новой эмоции...", 4, emotesScroll)
-local addIdInput = createInput("ID эмоции (цифры)...", 5, emotesScroll)
+local addNameInput = createInput("Название новой эмоции...", 5, emotesScroll)
+local addIdInput = createInput("ID эмоции (цифры)...", 6, emotesScroll)
 
-local addBtn = createButton("➕ Добавить эмоцию", nil, true, 6)
+local addBtn = createButton("➕ Добавить эмоцию", nil, true, 7)
 addBtn.BackgroundColor3 = Color3.fromRGB(40, 120, 200) 
 addBtn.MouseButton1Click:Connect(function()
     local newName = addNameInput.Text local newId = addIdInput.Text
@@ -363,8 +394,8 @@ addBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-local spacer2 = Instance.new("Frame") spacer2.Size = UDim2.new(1, 0, 0, 5) spacer2.BackgroundTransparency = 1 spacer2.LayoutOrder = 7 spacer2.Parent = emotesScroll
-local stopBtn = createButton("⏹ ОСТАНОВИТЬ", nil, false, 8)
+local spacer2 = Instance.new("Frame") spacer2.Size = UDim2.new(1, 0, 0, 5) spacer2.BackgroundTransparency = 1 spacer2.LayoutOrder = 8 spacer2.Parent = emotesScroll
+local stopBtn = createButton("⏹ ОСТАНОВИТЬ", nil, false, 9)
 stopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 stopBtn.MouseEnter:Connect(function() TweenService:Create(stopBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(230, 70, 70)}):Play() end)
 stopBtn.MouseLeave:Connect(function() TweenService:Create(stopBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(200, 50, 50)}):Play() end)
@@ -386,14 +417,12 @@ infoLabel.TextSize = 14
 infoLabel.LayoutOrder = 1
 infoLabel.Parent = movementScroll
 
--- Поля ввода для кастомных ID (объявляем их раньше)
 local idleInput = createInput("Ожидание (Idle) ID...", 4, movementScroll)
 local walkInput = createInput("Ходьба (Walk) ID...", 5, movementScroll)
 local runInput = createInput("Бег (Run) ID...", 6, movementScroll)
 local jumpInput = createInput("Прыжок (Jump) ID...", 7, movementScroll)
 local fallInput = createInput("Падение (Fall) ID...", 8, movementScroll)
 
--- Функция для подмены ID анимаций внутри персонажа
 local function setMovementAnim(stateName, animName, newId)
     if not newId or newId == "" then return end
     local char = player.Character
@@ -439,7 +468,6 @@ local function applyMovementSet(idle, walk, run, jump, fall)
     end
 end
 
--- Создаем кнопки для готовых паков
 local animPacks = {
     {name = "No Animations Pack", idle = "139422495554279", walk = "109690136432075", run = "140429302761672", jump = "113781194499932", fall = "92087058359779"},
     {name = "R6 Animations Pack", idle = "131260802088656", walk = "81275475859584", run = "86501760984532", jump = "109853826438411", fall = "110640511139183"},
@@ -504,7 +532,6 @@ applyMoveBtn.MouseButton1Click:Connect(function()
     TweenService:Create(applyMoveBtn, TweenInfo.new(0.1), {Size = UDim2.new(1, -10, 0, 45)}):Play()
     applyMovementSet(idleInput.Text, walkInput.Text, runInput.Text, jumpInput.Text, fallInput.Text)
 end)
-
 
 -- ==========================================
 -- УМНЫЕ АНИМАЦИИ И ЭФФЕКТЫ
