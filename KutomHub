@@ -1,4 +1,4 @@
-local AutoExecuteURL = "" -- ВСТАВЬ СЮДА СВОЮ RAW-ССЫЛКУ С GITHUB ДЛЯ АВТОЗАПУСКА ПРИ ПЕРЕЗАХОДЕ
+local AutoExecuteURL = "https://raw.githubusercontent.com/Egorzq/koolhallokrutoi/refs/heads/main/KutomHub" -- ВСТАВЬ СЮДА СВОЮ RAW-ССЫЛКУ С GITHUB ДЛЯ АВТОЗАПУСКА ПРИ ПЕРЕЗАХОДЕ
 
 local player = game:GetService("Players").LocalPlayer
 local UIS = game:GetService("UserInputService")
