@@ -11,7 +11,9 @@ local C3, U2, V2 = Color3.fromRGB, UDim2.new, Vector2.new
 
 -- ================== СОХРАНЕНИЕ ==================
 local saveFileName, customAnims, binds, allTeleports = "MyCustomAnims.json", {}, {}, {}
-local mySetts = {bg="rbxassetid://78674775572446", trans=0.5, r=120, g=150, b=255, rainbow=true, toggleKey="LeftControl", secretUnlocked=false}
+local mySetts = {bg="rbxassetid://78674775572446", trans=0.5, r=120, g=150, b=255, rainbow=true, toggleKey="LeftControl"}
+local secretUnlocked = false -- Сбрасывается при каждом перезапуске/выходе из игры
+
 pcall(function()
     if isfile and isfile(saveFileName) then
         local data = Http:JSONDecode(readfile(saveFileName))
@@ -119,12 +121,8 @@ local function updateTabs()
         btnMove.Visible = false 
         btnSetts.Visible = true
         
-        if mySetts.secretUnlocked then
+        if secretUnlocked then
             btnSecret.Visible = true
-            btnEmotes.Size = U2(0.25, 0, 1, 0) btnEmotes.Position = U2(0, 0, 0, 0)
-            btnSecret.Size = U2(0.25, 0, 1, 0) btnSecret.Position = U2(0.25, 0, 0, 0)
-            btnSetts.Size = U2(0.25, 0, 1, 0)  btnSetts.Position = U2(0.5, 0, 0, 0)
-            -- Можно занять оставшееся место или просто сделать по 0.33, если 3 вкладки
             btnEmotes.Size = U2(0.333, 0, 1, 0) btnEmotes.Position = U2(0, 0, 0, 0)
             btnSecret.Size = U2(0.333, 0, 1, 0) btnSecret.Position = U2(0.333, 0, 0, 0)
             btnSetts.Size = U2(0.334, 0, 1, 0)  btnSetts.Position = U2(0.666, 0, 0, 0)
@@ -143,7 +141,7 @@ local function updateTabs()
 
         if curFullTab == "Combined" then
             setActive(true,false,false) scrEmotes.Size=U2(0.5,-15,1,-85) scrEmotes.Position=U2(0,10,0,80) scrEmotes.Visible=true scrMove.Size=U2(0.5,-15,1,-85) scrMove.Position=U2(0.5,5,0,80) scrMove.Visible=true secretView.Visible=false settsView.Visible=false
-        elseif curFullTab == "Secret" and mySetts.secretUnlocked then
+        elseif curFullTab == "Secret" and secretUnlocked then
             setActive(false,true,false) scrEmotes.Visible=false scrMove.Visible=false settsView.Visible=false secretView.Size=U2(1,-20,1,-85) secretView.Position=U2(0,10,0,80) secretView.Visible=true
         else
             setActive(false,false,true) scrEmotes.Visible=false scrMove.Visible=false secretView.Visible=false settsView.Size=U2(1,-20,1,-85) settsView.Position=U2(0,10,0,80) settsView.Visible=true
@@ -159,7 +157,7 @@ local function updateTabs()
 end
 btnEmotes.MouseButton1Click:Connect(function() if isFullscreen then curFullTab="Combined" else curNormTab="Emotes" end updateTabs() end)
 btnMove.MouseButton1Click:Connect(function() if not isFullscreen then curNormTab="Movements" updateTabs() end end)
-btnSecret.MouseButton1Click:Connect(function() if isFullscreen and mySetts.secretUnlocked then curFullTab="Secret" updateTabs() end end)
+btnSecret.MouseButton1Click:Connect(function() if isFullscreen and secretUnlocked then curFullTab="Secret" updateTabs() end end)
 btnSetts.MouseButton1Click:Connect(function() if isFullscreen then curFullTab="Settings" updateTabs() end end)
 
 maxBtn.MouseButton1Click:Connect(function()
@@ -439,11 +437,10 @@ end)
 local secretClicks = 0
 local kutomSign = make("TextButton", {Size=U2(0,100,0,25), Position=U2(0,10,1,-30), BackgroundTransparency=1, TextColor3=C3(25, 25, 32), Text="By Kutom", Font=Enum.Font.GothamBold, TextSize=11, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=5}, settsView)
 kutomSign.MouseButton1Click:Connect(function()
-    if not mySetts.secretUnlocked then
+    if not secretUnlocked then
         secretClicks = secretClicks + 1
         if secretClicks >= 5 then
-            mySetts.secretUnlocked = true
-            saveData()
+            secretUnlocked = true
             showNotice("✨ Секретная вкладка активирована! ✨")
             updateTabs()
         end
