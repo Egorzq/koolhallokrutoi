@@ -1,653 +1,302 @@
 local player = game:GetService("Players").LocalPlayer
 local UIS = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
+local TS = game:GetService("TweenService")
+local RS = game:GetService("RunService")
+local Http = game:GetService("HttpService")
 local currentAnimTrack = nil
+local C3, U2, V2 = Color3.fromRGB, UDim2.new, Vector2.new
 
--- ==========================================
--- СИСТЕМА СОХРАНЕНИЯ (С БИНДАМИ)
--- ==========================================
-local saveFileName = "MyCustomAnims.json"
-local customAnims = {}
-local binds = {} 
-
-local function loadData()
+-- ================== СОХРАНЕНИЕ ==================
+local saveFileName, customAnims, binds = "MyCustomAnims.json", {}, {}
+pcall(function()
     if isfile and isfile(saveFileName) then
-        local success, result = pcall(function() return HttpService:JSONDecode(readfile(saveFileName)) end)
-        if success and type(result) == "table" then 
-            if result.customAnims then
-                customAnims = result.customAnims
-                binds = result.binds or {}
-            else
-                customAnims = result
-                binds = {}
-            end
-        end
+        local data = Http:JSONDecode(readfile(saveFileName))
+        if data.customAnims then customAnims, binds = data.customAnims, data.binds or {}
+        else customAnims = data end
     end
-end
-
+end)
 local function saveData()
-    if writefile then
-        local dataToSave = { customAnims = customAnims, binds = binds }
-        local success, result = pcall(function() return HttpService:JSONEncode(dataToSave) end)
-        if success then writefile(saveFileName, result) end
-    end
+    if writefile then pcall(function() writefile(saveFileName, Http:JSONEncode({customAnims=customAnims, binds=binds})) end) end
 end
 
-loadData()
+-- ================== UI HELPER ==================
+local function make(cls, props, parent)
+    local obj = Instance.new(cls)
+    for k, v in pairs(props) do obj[k] = v end
+    if parent then obj.Parent = parent end
+    return obj
+end
+local function addCorner(p, r) return make("UICorner", {CornerRadius = UDim.new(0, r)}, p) end
+local function addStroke(p, c, t) return make("UIStroke", {Color=c, Thickness=t, ApplyStrokeMode=Enum.ApplyStrokeMode.Border}, p) end
+local function tween(obj, t, props) TS:Create(obj, TweenInfo.new(t, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), props):Play() end
 
-local sgui = Instance.new("ScreenGui")
-sgui.Name = "RGBPremiumAnimPlayer"
-sgui.ResetOnSpawn = false
+local sgui = make("ScreenGui", {Name="RGBPremiumAnimPlayer", ResetOnSpawn=false})
+pcall(function() sgui.Parent = game:GetService("CoreGui") end)
+if not sgui.Parent then sgui.Parent = player:WaitForChild("PlayerGui") end
 
-local success = pcall(function() sgui.Parent = game:GetService("CoreGui") end)
-if not success then sgui.Parent = player:WaitForChild("PlayerGui") end
-
--- ==========================================
--- ДИЗАЙН ГЛАВНОГО ОКНА
--- ==========================================
+-- ================== ОСНОВНОЕ ОКНО ==================
 local isFullscreen = false
+local mainFrame = make("Frame", {Size=U2(0,0,0,0), AnchorPoint=V2(0.5,0.5), Position=U2(0.5,0,0.5,0), BackgroundColor3=C3(20,20,25), BackgroundTransparency=0.15, Active=true, Draggable=true, ClipsDescendants=true, Visible=false}, sgui)
+local bgImage = make("ImageLabel", {Size=U2(1,0,1,0), BackgroundTransparency=1, Image="rbxassetid://78674775572446", ImageTransparency=0.5, ScaleType=Enum.ScaleType.Crop, ZIndex=0}, mainFrame)
+addCorner(bgImage, 12) addCorner(mainFrame, 12)
+local mainStroke = addStroke(mainFrame, C3(255,255,255), 2) mainStroke.Transparency = 1
+local title = make("TextLabel", {Size=U2(1,-120,0,40), Position=U2(0,15,0,0), TextXAlignment=Enum.TextXAlignment.Left, BackgroundTransparency=1, Font=Enum.Font.GothamBlack, TextSize=16, Text="✨Kutom Hub✨", TextColor3=C3(255,255,255)}, mainFrame)
 
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 0, 0, 0)
-mainFrame.AnchorPoint = Vector2.new(0.5, 0.5) 
-mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0) 
-mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-mainFrame.BackgroundTransparency = 0.15 
-mainFrame.BorderSizePixel = 0
-mainFrame.Active = true
-mainFrame.Draggable = true
-mainFrame.ClipsDescendants = true 
-mainFrame.Visible = false
-mainFrame.Parent = sgui
+local function getWinSize() return isFullscreen and U2(0.85,0,0.85,0) or U2(0,280,0,480) end
+local function showWin(f, s, sz) f.Visible=true tween(f, 0.4, {Size=sz}) if s then tween(s, 0.4, {Transparency=0}) end end
+local function hideWin(f, s) tween(f, 0.3, {Size=U2(0,0,0,0)}) if s then tween(s, 0.2, {Transparency=1}) end task.delay(0.35, function() if f.Size.X.Offset<5 then f.Visible=false end end) end
 
-local bgImage = Instance.new("ImageLabel")
-bgImage.Size = UDim2.new(1, 0, 1, 0)
-bgImage.BackgroundTransparency = 1
-bgImage.Image = "rbxassetid://78674775572446"
-bgImage.ImageTransparency = 0.5
-bgImage.ScaleType = Enum.ScaleType.Crop 
-bgImage.ZIndex = 0 
-bgImage.Parent = mainFrame
-local bgCorner = Instance.new("UICorner") bgCorner.CornerRadius = UDim.new(0, 12) bgCorner.Parent = bgImage
+-- КНОПКИ УПРАВЛЕНИЯ
+local closeBtn = make("TextButton", {Size=U2(0,30,0,30), Position=U2(1,-35,0,5), BackgroundColor3=C3(180,40,40), BackgroundTransparency=0.2, TextColor3=C3(255,255,255), Text="✖", Font=Enum.Font.GothamBold, TextSize=14}, mainFrame) addCorner(closeBtn, 6)
+local maxBtn = make("TextButton", {Size=U2(0,30,0,30), Position=U2(1,-70,0,5), BackgroundColor3=C3(60,60,70), BackgroundTransparency=0.2, TextColor3=C3(255,255,255), Text="□", Font=Enum.Font.GothamBold, TextSize=18}, mainFrame) addCorner(maxBtn, 6)
+local minBtn = make("TextButton", {Size=U2(0,30,0,30), Position=U2(1,-105,0,5), BackgroundColor3=C3(60,60,70), BackgroundTransparency=0.2, TextColor3=C3(255,255,255), Text="➖", Font=Enum.Font.GothamBold, TextSize=14}, mainFrame) addCorner(minBtn, 6)
 
-local mainStroke = Instance.new("UIStroke")
-mainStroke.Thickness = 2
-mainStroke.Transparency = 1 
-mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-mainStroke.Parent = mainFrame
-local mainCorner = Instance.new("UICorner") mainCorner.CornerRadius = UDim.new(0, 12) mainCorner.Parent = mainFrame
+-- ПЛАВАЮЩАЯ КНОПКА
+local openBtn = make("TextButton", {Size=U2(0,0,0,0), AnchorPoint=V2(0.5,0.5), Position=U2(0.5,0,0.5,0), BackgroundColor3=C3(20,20,25), BackgroundTransparency=0.15, Text="🎵", Font=Enum.Font.GothamBold, TextSize=24, Active=true, Draggable=true, ClipsDescendants=true, Visible=false}, sgui)
+addCorner(openBtn, 25) local openStroke = addStroke(openBtn, C3(255,255,255), 2) openStroke.Transparency = 1
+local btnDragStart = V2(0,0)
+openBtn.MouseButton1Down:Connect(function() btnDragStart = V2(openBtn.AbsolutePosition.X, openBtn.AbsolutePosition.Y) end)
+openBtn.MouseButton1Click:Connect(function() if (V2(openBtn.AbsolutePosition.X, openBtn.AbsolutePosition.Y) - btnDragStart).Magnitude > 5 then return end mainFrame.Position = U2(0.5,0,0.5,0) hideWin(openBtn, openStroke) showWin(mainFrame, mainStroke, getWinSize()) end)
+minBtn.MouseButton1Click:Connect(function() openBtn.Position = mainFrame.Position hideWin(mainFrame, mainStroke) showWin(openBtn, openStroke, U2(0,50,0,50)) end)
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -120, 0, 40)
-title.Position = UDim2.new(0, 15, 0, 0) 
-title.TextXAlignment = Enum.TextXAlignment.Left 
-title.BackgroundTransparency = 1
-title.Font = Enum.Font.GothamBlack
-title.TextSize = 16
-title.Text = "✨Kutom Hub✨"
-title.Parent = mainFrame
+-- ПОДТВЕРЖДЕНИЕ
+local confOverlay = make("Frame", {Size=U2(1,0,1,0), BackgroundColor3=C3(0,0,0), BackgroundTransparency=1, ZIndex=10, Visible=false, Active=true}, mainFrame)
+local confBox = make("Frame", {Size=U2(0.8,0,0.3,0), AnchorPoint=V2(0.5,0.5), Position=U2(0.5,0,0.5,0), BackgroundColor3=C3(30,30,35), ZIndex=11}, confOverlay) addCorner(confBox, 10)
+local confText = make("TextLabel", {Size=U2(1,-20,0.6,0), Position=U2(0,10,0,0), BackgroundTransparency=1, TextColor3=C3(255,255,255), TextWrapped=true, Font=Enum.Font.GothamSemibold, TextSize=14, ZIndex=12}, confBox)
+local confYes = make("TextButton", {Size=U2(0.4,0,0,30), Position=U2(0.05,0,0.7,-10), BackgroundColor3=C3(200,50,50), TextColor3=C3(255,255,255), Text="Да", Font=Enum.Font.GothamBold, TextSize=14, ZIndex=12}, confBox) addCorner(confYes, 6)
+local confNo = make("TextButton", {Size=U2(0.4,0,0,30), Position=U2(0.55,0,0.7,-10), BackgroundColor3=C3(60,60,70), TextColor3=C3(255,255,255), Text="Нет", Font=Enum.Font.GothamBold, TextSize=14, ZIndex=12}, confBox) addCorner(confNo, 6)
+local curAction = nil
+local function ask(txt, act) confText.Text=txt curAction=act confOverlay.Visible=true tween(confOverlay,0.2,{BackgroundTransparency=0.5}) confBox.Size=U2(0,0,0,0) tween(confBox,0.3,{Size=U2(0.85,0,0.25,0)}) end
+confNo.MouseButton1Click:Connect(function() tween(confBox,0.2,{Size=U2(0,0,0,0)}) tween(confOverlay,0.2,{BackgroundTransparency=1}) task.delay(0.2, function() confOverlay.Visible=false end) end)
+confYes.MouseButton1Click:Connect(function() if curAction then curAction() end tween(confBox,0.2,{Size=U2(0,0,0,0)}) tween(confOverlay,0.2,{BackgroundTransparency=1}) task.delay(0.2, function() confOverlay.Visible=false end) end)
+closeBtn.MouseButton1Click:Connect(function() ask("Точно закрыть панель анимаций?", function() if currentAnimTrack then currentAnimTrack:Stop() end hideWin(mainFrame, mainStroke) task.wait(0.4) sgui:Destroy() end) end)
 
--- ==========================================
--- КОНТРАСТНЫЕ КНОПКИ УПРАВЛЕНИЯ ОКНОМ
--- ==========================================
-local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 30, 0, 30)
-closeBtn.Position = UDim2.new(1, -35, 0, 5)
-closeBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-closeBtn.BackgroundTransparency = 0.2
-closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeBtn.Text = "✖"
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 14
-closeBtn.Parent = mainFrame
-local cbCorner = Instance.new("UICorner") cbCorner.CornerRadius = UDim.new(0, 6) cbCorner.Parent = closeBtn
+-- ================== ВКЛАДКИ ==================
+local tabBar = make("Frame", {Size=U2(1,0,0,35), Position=U2(0,0,0,40), BackgroundTransparency=1}, mainFrame)
+local btnEmotes = make("TextButton", {Size=U2(0.5,0,1,0), Position=U2(0,0,0,0), BackgroundColor3=C3(40,40,50), TextColor3=C3(255,255,255), Text="🎵 Эмоции", Font=Enum.Font.GothamBold, TextSize=14}, tabBar)
+local btnMove = make("TextButton", {Size=U2(0.5,0,1,0), Position=U2(0.5,0,0,0), BackgroundColor3=C3(25,25,30), TextColor3=C3(150,150,150), Text="🚶 Движения", Font=Enum.Font.GothamBold, TextSize=14}, tabBar)
+local btnSecret = make("TextButton", {Size=U2(0.5,0,1,0), Position=U2(0.5,0,0,0), BackgroundColor3=C3(25,25,30), TextColor3=C3(150,150,150), Text="❓ Секретно", Font=Enum.Font.GothamBold, TextSize=14, Visible=false}, tabBar)
 
-local maxBtn = Instance.new("TextButton")
-maxBtn.Size = UDim2.new(0, 30, 0, 30)
-maxBtn.Position = UDim2.new(1, -70, 0, 5)
-maxBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
-maxBtn.BackgroundTransparency = 0.2
-maxBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-maxBtn.Text = "□"
-maxBtn.Font = Enum.Font.GothamBold
-maxBtn.TextSize = 18
-maxBtn.Parent = mainFrame
-local mbCorner = Instance.new("UICorner") mbCorner.CornerRadius = UDim.new(0, 6) mbCorner.Parent = maxBtn
+local scrollProps = {BackgroundTransparency=1, ScrollBarThickness=3, ScrollBarImageColor3=C3(150,150,255), AutomaticCanvasSize=Enum.AutomaticSize.Y, CanvasSize=U2(0,0,0,0)}
+local scrEmotes = make("ScrollingFrame", scrollProps, mainFrame) scrEmotes.Visible=true
+local scrMove = make("ScrollingFrame", scrollProps, mainFrame) scrMove.Visible=false
+make("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,10)}, scrEmotes)
+make("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,10)}, scrMove)
+local secretView = make("Frame", {BackgroundTransparency=1, Visible=false}, mainFrame)
 
-local minimizeBtn = Instance.new("TextButton")
-minimizeBtn.Size = UDim2.new(0, 30, 0, 30)
-minimizeBtn.Position = UDim2.new(1, -105, 0, 5)
-minimizeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
-minimizeBtn.BackgroundTransparency = 0.2
-minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-minimizeBtn.Text = "➖"
-minimizeBtn.Font = Enum.Font.GothamBold
-minimizeBtn.TextSize = 14
-minimizeBtn.Parent = mainFrame
-local minCorner = Instance.new("UICorner") minCorner.CornerRadius = UDim.new(0, 6) minCorner.Parent = minimizeBtn
-
-closeBtn.MouseEnter:Connect(function() TweenService:Create(closeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(220, 50, 50)}):Play() end)
-closeBtn.MouseLeave:Connect(function() TweenService:Create(closeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(180, 40, 40)}):Play() end)
-maxBtn.MouseEnter:Connect(function() TweenService:Create(maxBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(80, 80, 100)}):Play() end)
-maxBtn.MouseLeave:Connect(function() TweenService:Create(maxBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 60, 70)}):Play() end)
-minimizeBtn.MouseEnter:Connect(function() TweenService:Create(minimizeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(80, 80, 100)}):Play() end)
-minimizeBtn.MouseLeave:Connect(function() TweenService:Create(minimizeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 60, 70)}):Play() end)
-
--- ПЛАВАЮЩАЯ КНОПКА (СВОРАЧИВАНИЕ)
-local openBtn = Instance.new("TextButton")
-openBtn.Size = UDim2.new(0, 0, 0, 0)
-openBtn.AnchorPoint = Vector2.new(0.5, 0.5) 
-openBtn.Position = UDim2.new(0.5, 0, 0.5, 0) 
-openBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-openBtn.BackgroundTransparency = 0.15
-openBtn.Text = "🎵"
-openBtn.Font = Enum.Font.GothamBold
-openBtn.TextSize = 24
-openBtn.Active = true
-openBtn.Draggable = true 
-openBtn.ClipsDescendants = true
-openBtn.Visible = false
-openBtn.Parent = sgui
-local openCorner = Instance.new("UICorner") openCorner.CornerRadius = UDim.new(0, 25) openCorner.Parent = openBtn
-local openStroke = Instance.new("UIStroke") openStroke.Thickness = 2 openStroke.Transparency = 1 openStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border openStroke.Parent = openBtn
-
--- ==========================================
--- СИСТЕМА ПОДТВЕРЖДЕНИЯ (Popup)
--- ==========================================
-local confirmOverlay = Instance.new("Frame") confirmOverlay.Size = UDim2.new(1, 0, 1, 0) confirmOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0) confirmOverlay.BackgroundTransparency = 1 confirmOverlay.ZIndex = 10 confirmOverlay.Visible = false confirmOverlay.Active = true confirmOverlay.Parent = mainFrame
-local confirmBox = Instance.new("Frame") confirmBox.Size = UDim2.new(0.8, 0, 0.3, 0) confirmBox.AnchorPoint = Vector2.new(0.5, 0.5) confirmBox.Position = UDim2.new(0.5, 0, 0.5, 0) confirmBox.BackgroundColor3 = Color3.fromRGB(30, 30, 35) confirmBox.ZIndex = 11 confirmBox.Parent = confirmOverlay
-local confirmBoxCorner = Instance.new("UICorner") confirmBoxCorner.CornerRadius = UDim.new(0, 10) confirmBoxCorner.Parent = confirmBox
-local confirmText = Instance.new("TextLabel") confirmText.Size = UDim2.new(1, -20, 0.6, 0) confirmText.Position = UDim2.new(0, 10, 0, 0) confirmText.BackgroundTransparency = 1 confirmText.TextColor3 = Color3.fromRGB(255, 255, 255) confirmText.TextWrapped = true confirmText.Font = Enum.Font.GothamSemibold confirmText.TextSize = 14 confirmText.ZIndex = 12 confirmText.Parent = confirmBox
-local confirmYesBtn = Instance.new("TextButton") confirmYesBtn.Size = UDim2.new(0.4, 0, 0, 30) confirmYesBtn.Position = UDim2.new(0.05, 0, 0.7, -10) confirmYesBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50) confirmYesBtn.TextColor3 = Color3.fromRGB(255, 255, 255) confirmYesBtn.Text = "Да" confirmYesBtn.Font = Enum.Font.GothamBold confirmYesBtn.TextSize = 14 confirmYesBtn.ZIndex = 12 confirmYesBtn.Parent = confirmBox
-local yesCorner = Instance.new("UICorner") yesCorner.CornerRadius = UDim.new(0, 6) yesCorner.Parent = confirmYesBtn
-local confirmNoBtn = Instance.new("TextButton") confirmNoBtn.Size = UDim2.new(0.4, 0, 0, 30) confirmNoBtn.Position = UDim2.new(0.55, 0, 0.7, -10) confirmNoBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70) confirmNoBtn.TextColor3 = Color3.fromRGB(255, 255, 255) confirmNoBtn.Text = "Нет" confirmNoBtn.Font = Enum.Font.GothamBold confirmNoBtn.TextSize = 14 confirmNoBtn.ZIndex = 12 confirmNoBtn.Parent = confirmBox
-local noCorner = Instance.new("UICorner") noCorner.CornerRadius = UDim.new(0, 6) noCorner.Parent = confirmNoBtn
-
-local currentConfirmAction = nil
-local function showConfirmation(text, action) confirmText.Text = text currentConfirmAction = action confirmOverlay.Visible = true TweenService:Create(confirmOverlay, TweenInfo.new(0.2), {BackgroundTransparency = 0.5}):Play() confirmBox.Size = UDim2.new(0, 0, 0, 0) TweenService:Create(confirmBox, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0.85, 0, 0.25, 0)}):Play() end
-local function hideConfirmation() TweenService:Create(confirmBox, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0)}):Play() local hideTween = TweenService:Create(confirmOverlay, TweenInfo.new(0.2), {BackgroundTransparency = 1}) hideTween:Play() hideTween.Completed:Connect(function() confirmOverlay.Visible = false end) end
-confirmNoBtn.MouseButton1Click:Connect(hideConfirmation)
-confirmYesBtn.MouseButton1Click:Connect(function() if currentConfirmAction then currentConfirmAction() end hideConfirmation() end)
-
--- ==========================================
--- КОНТЕЙНЕРЫ КОНТЕНТА И СИСТЕМА ВКЛАДОК
--- ==========================================
-local emotesScroll = Instance.new("ScrollingFrame") emotesScroll.BackgroundTransparency = 1 emotesScroll.ScrollBarThickness = 3 emotesScroll.ScrollBarImageColor3 = Color3.fromRGB(150, 150, 255) emotesScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y emotesScroll.CanvasSize = UDim2.new(0, 0, 0, 0) emotesScroll.Visible = true emotesScroll.Parent = mainFrame
-local emotesLayout = Instance.new("UIListLayout") emotesLayout.SortOrder = Enum.SortOrder.LayoutOrder emotesLayout.Padding = UDim.new(0, 10) emotesLayout.Parent = emotesScroll
-
-local movementScroll = Instance.new("ScrollingFrame") movementScroll.BackgroundTransparency = 1 movementScroll.ScrollBarThickness = 3 movementScroll.ScrollBarImageColor3 = Color3.fromRGB(150, 150, 255) movementScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y movementScroll.CanvasSize = UDim2.new(0, 0, 0, 0) movementScroll.Visible = false movementScroll.Parent = mainFrame
-local movementLayout = Instance.new("UIListLayout") movementLayout.SortOrder = Enum.SortOrder.LayoutOrder movementLayout.Padding = UDim.new(0, 10) movementLayout.Parent = movementScroll
-
--- ==========================================
--- СЕКРЕТНАЯ ВКЛАДКА
--- ==========================================
-local secretView = Instance.new("Frame")
-secretView.BackgroundTransparency = 1
-secretView.Visible = false
-secretView.Parent = mainFrame
-
-local passInput = Instance.new("TextBox")
-passInput.Size = UDim2.new(0, 250, 0, 45)
-passInput.AnchorPoint = Vector2.new(0.5, 0.5)
-passInput.Position = UDim2.new(0.5, 0, 0.5, -20)
-passInput.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-passInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-passInput.PlaceholderText = "Пароль..."
-passInput.Font = Enum.Font.Gotham
-passInput.TextSize = 16
-passInput.Text = ""
-passInput.Parent = secretView
-local passCorner = Instance.new("UICorner") passCorner.CornerRadius = UDim.new(0, 8) passCorner.Parent = passInput
-local passStroke = Instance.new("UIStroke") passStroke.Color = Color3.fromRGB(80, 80, 100) passStroke.Thickness = 1 passStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border passStroke.Parent = passInput
-
-local secretContent = Instance.new("Frame")
-secretContent.Size = UDim2.new(1, -20, 1, -20)
-secretContent.Position = UDim2.new(0, 10, 0, 10)
-secretContent.BackgroundTransparency = 1
-secretContent.Visible = false
-secretContent.Parent = secretView
-local secretLayout = Instance.new("UIListLayout") secretLayout.SortOrder = Enum.SortOrder.LayoutOrder secretLayout.Padding = UDim.new(0, 15) secretLayout.Parent = secretContent
-
-local funnyTexts = {
-    "Кутом не читерит, он меняет реальность.",
-    "Античит Роблокса извиняется перед Кутомом.",
-    "Кутом может поделить на ноль и не крашнуть сервер.",
-    "Когда Кутом заходит в игру, пинг падает у всех.",
-    "Если Кутом прыгнет, вся Земля опустится вниз."
-}
-local jokeLabel = Instance.new("TextLabel")
-jokeLabel.Size = UDim2.new(0, 350, 0, 30)
-jokeLabel.AnchorPoint = Vector2.new(1, 1)
-jokeLabel.Position = UDim2.new(1, -10, 1, -10)
-jokeLabel.BackgroundTransparency = 1
-jokeLabel.TextColor3 = Color3.fromRGB(150, 150, 200)
-jokeLabel.TextXAlignment = Enum.TextXAlignment.Right
-jokeLabel.Font = Enum.Font.Gotham
-jokeLabel.TextSize = 12
-jokeLabel.Text = ""
-jokeLabel.Parent = secretContent
-
-passInput.Changed:Connect(function(prop)
-    if prop == "Text" and passInput.Text == "kutomkrutoi" then
-        passInput.Visible = false
-        secretContent.Visible = true
-        jokeLabel.Text = "✨ " .. funnyTexts[math.random(1, #funnyTexts)]
-    end
-end)
-
-local function createCheat(name, placeholder, order, callback)
-    local container = Instance.new("Frame") container.Size = UDim2.new(1, 0, 0, 45) container.BackgroundTransparency = 1 container.LayoutOrder = order container.Parent = secretContent
-    local input, btnSize, btnPos = nil, UDim2.new(1, 0, 1, 0), UDim2.new(0, 0, 0, 0)
-    if placeholder then
-        input = Instance.new("TextBox") input.Size = UDim2.new(0.6, -10, 1, 0) input.BackgroundColor3 = Color3.fromRGB(15, 15, 20) input.TextColor3 = Color3.fromRGB(255, 255, 255) input.PlaceholderText = placeholder input.Font = Enum.Font.Gotham input.TextSize = 14 input.Parent = container
-        local c = Instance.new("UICorner") c.CornerRadius = UDim.new(0,8) c.Parent = input
-        local s = Instance.new("UIStroke") s.Color = Color3.fromRGB(80,80,100) s.Thickness=1 s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border s.Parent = input
-        btnSize, btnPos = UDim2.new(0.4, 0, 1, 0), UDim2.new(0.6, 0, 0, 0)
-    end
-    local btn = Instance.new("TextButton") btn.Size = btnSize btn.Position = btnPos btn.BackgroundColor3 = Color3.fromRGB(40, 120, 200) btn.TextColor3 = Color3.fromRGB(255, 255, 255) btn.Text = name btn.Font = Enum.Font.GothamBold btn.TextSize = 14 btn.Parent = container
-    local c2 = Instance.new("UICorner") c2.CornerRadius = UDim.new(0,8) c2.Parent = btn
-    btn.MouseButton1Click:Connect(function() local val = input and input.Text or nil callback(val, btn) end)
-    return container
-end
-
-createCheat("Установить Скорость", "Скорость (стандарт 16)", 1, function(val)
-    local num = tonumber(val)
-    if num and player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
-        player.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = num
-    end
-end)
-
-createCheat("Установить Прыжок", "Высота (стандарт 50)", 2, function(val)
-    local num = tonumber(val)
-    if num and player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
-        local hum = player.Character:FindFirstChildOfClass("Humanoid")
-        hum.UseJumpPower = true
-        hum.JumpPower = num
-    end
-end)
-
-local flyConnection
-local isFlying = false
-local bv, bg
-createCheat("Включить Полет", nil, 3, function(_, btn)
-    isFlying = not isFlying
-    local char = player.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    if isFlying then
-        btn.Text = "Выключить Полет"
-        btn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-        
-        bv = Instance.new("BodyVelocity") bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge) bv.Parent = hrp
-        bg = Instance.new("BodyGyro") bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge) bg.P = 10000 bg.Parent = hrp
-
-        local camera = workspace.CurrentCamera
-        flyConnection = RunService.RenderStepped:Connect(function()
-            if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
-                isFlying = false if flyConnection then flyConnection:Disconnect() end return
-            end
-            bg.CFrame = camera.CFrame
-            local moveVector = Vector3.new()
-            if UIS:IsKeyDown(Enum.KeyCode.W) then moveVector = moveVector + camera.CFrame.LookVector end
-            if UIS:IsKeyDown(Enum.KeyCode.S) then moveVector = moveVector - camera.CFrame.LookVector end
-            if UIS:IsKeyDown(Enum.KeyCode.A) then moveVector = moveVector - camera.CFrame.RightVector end
-            if UIS:IsKeyDown(Enum.KeyCode.D) then moveVector = moveVector + camera.CFrame.RightVector end
-            
-            if moveVector.Magnitude > 0 then bv.Velocity = moveVector.Unit * 50 else bv.Velocity = Vector3.zero end
-        end)
-    else
-        btn.Text = "Включить Полет"
-        btn.BackgroundColor3 = Color3.fromRGB(40, 120, 200)
-        if flyConnection then flyConnection:Disconnect() end
-        if bv then bv:Destroy() end if bg then bg:Destroy() end
-    end
-end)
-
-
--- ==========================================
--- ПАНЕЛЬ ВКЛАДОК
--- ==========================================
-local tabBar = Instance.new("Frame")
-tabBar.Size = UDim2.new(1, 0, 0, 35)
-tabBar.Position = UDim2.new(0, 0, 0, 40)
-tabBar.BackgroundTransparency = 1
-tabBar.Parent = mainFrame
-
-local tabEmotesBtn = Instance.new("TextButton") tabEmotesBtn.Size = UDim2.new(0.5, 0, 1, 0) tabEmotesBtn.Position = UDim2.new(0, 0, 0, 0) tabEmotesBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50) tabEmotesBtn.TextColor3 = Color3.fromRGB(255, 255, 255) tabEmotesBtn.Font = Enum.Font.GothamBold tabEmotesBtn.TextSize = 14 tabEmotesBtn.BorderSizePixel = 0 tabEmotesBtn.Parent = tabBar
-local tabMovementBtn = Instance.new("TextButton") tabMovementBtn.Size = UDim2.new(0.5, 0, 1, 0) tabMovementBtn.Position = UDim2.new(0.5, 0, 0, 0) tabMovementBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 30) tabMovementBtn.TextColor3 = Color3.fromRGB(150, 150, 150) tabMovementBtn.Font = Enum.Font.GothamBold tabMovementBtn.TextSize = 14 tabMovementBtn.BorderSizePixel = 0 tabMovementBtn.Parent = tabBar
-local tabEmptyBtn = Instance.new("TextButton") tabEmptyBtn.Size = UDim2.new(0.5, 0, 1, 0) tabEmptyBtn.Position = UDim2.new(0.5, 0, 0, 0) tabEmptyBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 30) tabEmptyBtn.TextColor3 = Color3.fromRGB(150, 150, 150) tabEmptyBtn.Font = Enum.Font.GothamBold tabEmptyBtn.TextSize = 14 tabEmptyBtn.BorderSizePixel = 0 tabEmptyBtn.Visible = false tabEmptyBtn.Parent = tabBar
-
-local currentNormalTab = "Emotes"
-local currentFullTab = "Combined"
-
-local function styleTabActive(btn) TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(40, 40, 50), TextColor3 = Color3.fromRGB(255, 255, 255)}):Play() end
-local function styleTabInactive(btn) TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(25, 25, 30), TextColor3 = Color3.fromRGB(150, 150, 150)}):Play() end
-
+local curFullTab, curNormTab = "Combined", "Emotes"
 local function updateTabs()
     if isFullscreen then
-        tabEmotesBtn.Text = "🏠 Главная (Все)"
-        tabMovementBtn.Visible = false
-        tabEmptyBtn.Visible = true
-        tabEmptyBtn.Text = "❓ Секретно"
-        
-        if currentFullTab == "Combined" then
-            styleTabActive(tabEmotesBtn) styleTabInactive(tabEmptyBtn)
-            emotesScroll.Size = UDim2.new(0.5, -15, 1, -85) emotesScroll.Position = UDim2.new(0, 10, 0, 80) emotesScroll.Visible = true
-            movementScroll.Size = UDim2.new(0.5, -15, 1, -85) movementScroll.Position = UDim2.new(0.5, 5, 0, 80) movementScroll.Visible = true
-            secretView.Visible = false
+        btnEmotes.Text = "🏠 Главная (Все)" btnMove.Visible = false btnSecret.Visible = true
+        if curFullTab == "Combined" then
+            tween(btnEmotes,0.2,{BackgroundColor3=C3(40,40,50), TextColor3=C3(255,255,255)}) tween(btnSecret,0.2,{BackgroundColor3=C3(25,25,30), TextColor3=C3(150,150,150)})
+            scrEmotes.Size=U2(0.5,-15,1,-85) scrEmotes.Position=U2(0,10,0,80) scrEmotes.Visible=true
+            scrMove.Size=U2(0.5,-15,1,-85) scrMove.Position=U2(0.5,5,0,80) scrMove.Visible=true
+            secretView.Visible=false
         else
-            styleTabInactive(tabEmotesBtn) styleTabActive(tabEmptyBtn)
-            emotesScroll.Visible = false movementScroll.Visible = false
-            secretView.Size = UDim2.new(1, -20, 1, -85) secretView.Position = UDim2.new(0, 10, 0, 80) secretView.Visible = true
+            tween(btnSecret,0.2,{BackgroundColor3=C3(40,40,50), TextColor3=C3(255,255,255)}) tween(btnEmotes,0.2,{BackgroundColor3=C3(25,25,30), TextColor3=C3(150,150,150)})
+            scrEmotes.Visible=false scrMove.Visible=false
+            secretView.Size=U2(1,-20,1,-85) secretView.Position=U2(0,10,0,80) secretView.Visible=true
         end
     else
-        tabEmotesBtn.Text = "🎵 Эмоции"
-        tabMovementBtn.Text = "🚶 Движения"
-        tabMovementBtn.Visible = true
-        tabEmptyBtn.Visible = false
-        
-        emotesScroll.Size = UDim2.new(1, -20, 1, -85) emotesScroll.Position = UDim2.new(0, 10, 0, 80)
-        movementScroll.Size = UDim2.new(1, -20, 1, -85) movementScroll.Position = UDim2.new(0, 10, 0, 80)
-        
-        if currentNormalTab == "Emotes" then
-            styleTabActive(tabEmotesBtn) styleTabInactive(tabMovementBtn)
-            emotesScroll.Visible = true movementScroll.Visible = false
+        btnEmotes.Text = "🎵 Эмоции" btnMove.Text = "🚶 Движения" btnMove.Visible = true btnSecret.Visible = false secretView.Visible = false
+        scrEmotes.Size=U2(1,-20,1,-85) scrEmotes.Position=U2(0,10,0,80) scrMove.Size=U2(1,-20,1,-85) scrMove.Position=U2(0,10,0,80)
+        if curNormTab == "Emotes" then
+            tween(btnEmotes,0.2,{BackgroundColor3=C3(40,40,50), TextColor3=C3(255,255,255)}) tween(btnMove,0.2,{BackgroundColor3=C3(25,25,30), TextColor3=C3(150,150,150)})
+            scrEmotes.Visible=true scrMove.Visible=false
         else
-            styleTabInactive(tabEmotesBtn) styleTabActive(tabMovementBtn)
-            emotesScroll.Visible = false movementScroll.Visible = true
-        end
-        secretView.Visible = false
-    end
-end
-
-tabEmotesBtn.MouseButton1Click:Connect(function() if isFullscreen then currentFullTab = "Combined" else currentNormalTab = "Emotes" end updateTabs() end)
-tabMovementBtn.MouseButton1Click:Connect(function() if not isFullscreen then currentNormalTab = "Movements" updateTabs() end end)
-tabEmptyBtn.MouseButton1Click:Connect(function() if isFullscreen then currentFullTab = "Empty" updateTabs() end end)
-
--- ==========================================
--- ЛОГИКА БИНДОВ И ЭМОЦИЙ
--- ==========================================
-local topPadding = Instance.new("Frame") topPadding.Size = UDim2.new(1, 0, 0, 2) topPadding.BackgroundTransparency = 1 topPadding.LayoutOrder = 0 topPadding.Parent = emotesScroll
-local isAnimLooped = false local isBinding = false local bindingId = nil local bindingBtn = nil
-
-local function updateBindBtn(btn, key)
-    if key then btn.Text = "["..key.."]" btn.TextColor3 = Color3.fromRGB(150, 255, 150) else btn.Text = "[ - ]" btn.TextColor3 = Color3.fromRGB(150, 150, 150) end
-end
-
-local function setupBindButton(bindBtn, id)
-    updateBindBtn(bindBtn, binds[id])
-    bindBtn.MouseEnter:Connect(function() if bindingBtn ~= bindBtn then TweenService:Create(bindBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50, 50, 60)}):Play() end end)
-    bindBtn.MouseLeave:Connect(function() if bindingBtn ~= bindBtn then TweenService:Create(bindBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(30, 30, 40)}):Play() end end)
-    bindBtn.MouseButton1Click:Connect(function()
-        if isBinding then return end
-        isBinding = true bindingId = id bindingBtn = bindBtn
-        bindBtn.Text = "[...]" bindBtn.TextColor3 = Color3.fromRGB(255, 200, 50)
-        TweenService:Create(bindBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(70, 70, 50)}):Play()
-    end)
-end
-
-local loopToggleBtn = Instance.new("TextButton") loopToggleBtn.Size = UDim2.new(1, -10, 0, 38) loopToggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70) loopToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255) loopToggleBtn.Text = "🔁 Повтор: 1 РАЗ" loopToggleBtn.Font = Enum.Font.GothamBold loopToggleBtn.TextSize = 14 loopToggleBtn.AutoButtonColor = false loopToggleBtn.LayoutOrder = 1 loopToggleBtn.Parent = emotesScroll
-local loopCorner = Instance.new("UICorner") loopCorner.CornerRadius = UDim.new(0, 8) loopCorner.Parent = loopToggleBtn
-local loopStroke = Instance.new("UIStroke") loopStroke.Color = Color3.fromRGB(100, 100, 120) loopStroke.Thickness = 1 loopStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border loopStroke.Parent = loopToggleBtn
-
-loopToggleBtn.MouseButton1Click:Connect(function()
-    isAnimLooped = not isAnimLooped
-    if isAnimLooped then TweenService:Create(loopToggleBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(40, 160, 60)}):Play() loopToggleBtn.Text = "🔁 Повтор: БЕСКОНЕЧНО" loopStroke.Color = Color3.fromRGB(80, 200, 100)
-    else TweenService:Create(loopToggleBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 60, 70)}):Play() loopToggleBtn.Text = "🔁 Повтор: 1 РАЗ" loopStroke.Color = Color3.fromRGB(100, 100, 120) end
-    if currentAnimTrack then currentAnimTrack.Looped = isAnimLooped end
-end)
-
-local function playAnim(animId)
-    local character = player.Character if not character then return end local humanoid = character:FindFirstChildOfClass("Humanoid") if not humanoid then return end
-    local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
-    if currentAnimTrack then currentAnimTrack:Stop() end
-    local idToPlay = animId if not string.match(idToPlay, "^rbxassetid://") then idToPlay = "rbxassetid://" .. idToPlay end
-    local animation = Instance.new("Animation") animation.AnimationId = idToPlay
-    currentAnimTrack = animator:LoadAnimation(animation) currentAnimTrack.Looped = isAnimLooped currentAnimTrack:Play()
-end
-
-local function createButton(name, id, isSpecial, order)
-    local container = Instance.new("Frame") container.Size = UDim2.new(1, -10, 0, 38) container.BackgroundTransparency = 1 container.LayoutOrder = order or 2 container.Parent = emotesScroll
-    local defaultColor = isSpecial and Color3.fromRGB(40, 160, 60) or Color3.fromRGB(40, 40, 50) local hoverColor = isSpecial and Color3.fromRGB(60, 200, 80) or Color3.fromRGB(60, 60, 80)
-
-    if not id then
-        local btn = Instance.new("TextButton") btn.Size = UDim2.new(1, 0, 1, 0) btn.BackgroundColor3 = defaultColor btn.TextColor3 = Color3.fromRGB(230, 230, 230) btn.Text = name btn.Font = Enum.Font.GothamSemibold btn.TextSize = 14 btn.AutoButtonColor = false btn.Parent = container
-        local corner = Instance.new("UICorner") corner.CornerRadius = UDim.new(0, 8) corner.Parent = btn
-        local stroke = Instance.new("UIStroke") stroke.Color = Color3.fromRGB(80, 80, 100) stroke.Thickness = 1 stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border stroke.Parent = btn
-        btn.MouseEnter:Connect(function() TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = hoverColor}):Play() TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(255, 255, 255)}):Play() end)
-        btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = defaultColor}):Play() TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(80, 80, 100)}):Play() end)
-        btn.MouseButton1Down:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(1, -6, 0, 34)}):Play() end)
-        btn.MouseButton1Up:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(1, 0, 1, 0)}):Play() end)
-        return btn
-    end
-
-    local playBtn = Instance.new("TextButton") playBtn.Size = UDim2.new(1, -44, 1, 0) playBtn.BackgroundColor3 = defaultColor playBtn.TextColor3 = Color3.fromRGB(230, 230, 230) playBtn.Text = "▶ " .. name playBtn.Font = Enum.Font.GothamSemibold playBtn.TextSize = 14 playBtn.AutoButtonColor = false playBtn.Parent = container
-    local corner1 = Instance.new("UICorner") corner1.CornerRadius = UDim.new(0, 8) corner1.Parent = playBtn
-    local stroke1 = Instance.new("UIStroke") stroke1.Color = Color3.fromRGB(80, 80, 100) stroke1.Thickness = 1 stroke1.ApplyStrokeMode = Enum.ApplyStrokeMode.Border stroke1.Parent = playBtn
-    
-    local bindBtn = Instance.new("TextButton") bindBtn.Size = UDim2.new(0, 38, 1, 0) bindBtn.Position = UDim2.new(1, -38, 0, 0) bindBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 40) bindBtn.Font = Enum.Font.GothamBold bindBtn.TextSize = 12 bindBtn.AutoButtonColor = false bindBtn.Parent = container
-    local corner2 = Instance.new("UICorner") corner2.CornerRadius = UDim.new(0, 8) corner2.Parent = bindBtn
-    local stroke2 = Instance.new("UIStroke") stroke2.Color = Color3.fromRGB(80, 80, 100) stroke2.Thickness = 1 stroke2.ApplyStrokeMode = Enum.ApplyStrokeMode.Border stroke2.Parent = bindBtn
-    setupBindButton(bindBtn, id)
-
-    playBtn.MouseEnter:Connect(function() TweenService:Create(playBtn, TweenInfo.new(0.2), {BackgroundColor3 = hoverColor}):Play() end)
-    playBtn.MouseLeave:Connect(function() TweenService:Create(playBtn, TweenInfo.new(0.2), {BackgroundColor3 = defaultColor}):Play() end)
-    playBtn.MouseButton1Down:Connect(function() TweenService:Create(playBtn, TweenInfo.new(0.1), {Size = UDim2.new(1, -48, 0, 34)}):Play() end)
-    playBtn.MouseButton1Up:Connect(function() TweenService:Create(playBtn, TweenInfo.new(0.1), {Size = UDim2.new(1, -44, 1, 0)}):Play() playAnim(id) end)
-    return container
-end
-
-local function createCustomButton(name, id)
-    local container = Instance.new("Frame") container.Size = UDim2.new(1, -10, 0, 38) container.BackgroundTransparency = 1 container.LayoutOrder = 3 container.Parent = emotesScroll
-    local playBtn = Instance.new("TextButton") playBtn.Size = UDim2.new(1, -88, 1, 0) playBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 50) playBtn.TextColor3 = Color3.fromRGB(230, 230, 230) playBtn.Text = "⭐ " .. name playBtn.Font = Enum.Font.GothamSemibold playBtn.TextSize = 14 playBtn.AutoButtonColor = false playBtn.Parent = container
-    local corner1 = Instance.new("UICorner") corner1.CornerRadius = UDim.new(0, 8) corner1.Parent = playBtn
-    local stroke1 = Instance.new("UIStroke") stroke1.Color = Color3.fromRGB(80, 80, 100) stroke1.Thickness = 1 stroke1.ApplyStrokeMode = Enum.ApplyStrokeMode.Border stroke1.Parent = playBtn
-    local bindBtn = Instance.new("TextButton") bindBtn.Size = UDim2.new(0, 38, 1, 0) bindBtn.Position = UDim2.new(1, -82, 0, 0) bindBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 40) bindBtn.Font = Enum.Font.GothamBold bindBtn.TextSize = 12 bindBtn.AutoButtonColor = false bindBtn.Parent = container
-    local cornerBind = Instance.new("UICorner") cornerBind.CornerRadius = UDim.new(0, 8) cornerBind.Parent = bindBtn
-    local strokeBind = Instance.new("UIStroke") strokeBind.Color = Color3.fromRGB(80, 80, 100) strokeBind.Thickness = 1 strokeBind.ApplyStrokeMode = Enum.ApplyStrokeMode.Border strokeBind.Parent = bindBtn
-    local delBtn = Instance.new("TextButton") delBtn.Size = UDim2.new(0, 38, 1, 0) delBtn.Position = UDim2.new(1, -38, 0, 0) delBtn.BackgroundColor3 = Color3.fromRGB(60, 30, 35) delBtn.TextColor3 = Color3.fromRGB(255, 100, 100) delBtn.Text = "🗑️" delBtn.Font = Enum.Font.GothamBold delBtn.TextSize = 14 delBtn.AutoButtonColor = false delBtn.Parent = container
-    local corner2 = Instance.new("UICorner") corner2.CornerRadius = UDim.new(0, 8) corner2.Parent = delBtn
-    local stroke2 = Instance.new("UIStroke") stroke2.Color = Color3.fromRGB(120, 50, 50) stroke2.Thickness = 1 stroke2.ApplyStrokeMode = Enum.ApplyStrokeMode.Border stroke2.Parent = delBtn
-
-    setupBindButton(bindBtn, id)
-
-    playBtn.MouseEnter:Connect(function() TweenService:Create(playBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 60, 80)}):Play() end)
-    playBtn.MouseLeave:Connect(function() TweenService:Create(playBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(40, 40, 50)}):Play() end)
-    playBtn.MouseButton1Down:Connect(function() TweenService:Create(playBtn, TweenInfo.new(0.1), {Size = UDim2.new(1, -92, 0, 34)}):Play() end)
-    playBtn.MouseButton1Up:Connect(function() TweenService:Create(playBtn, TweenInfo.new(0.1), {Size = UDim2.new(1, -88, 1, 0)}):Play() playAnim(id) end)
-    
-    delBtn.MouseEnter:Connect(function() TweenService:Create(delBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(200, 50, 50), TextColor3 = Color3.fromRGB(255, 255, 255)}):Play() end)
-    delBtn.MouseLeave:Connect(function() TweenService:Create(delBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(60, 30, 35), TextColor3 = Color3.fromRGB(255, 100, 100)}):Play() end)
-    delBtn.MouseButton1Click:Connect(function()
-        showConfirmation("Удалить эмоцию\n'" .. name .. "'?", function()
-            for i, v in ipairs(customAnims) do if v.name == name and v.id == id then table.remove(customAnims, i) break end end
-            binds[id] = nil saveData() container:Destroy()
-        end)
-    end)
-end
-
-createButton("Take The L", "118343267142519", false, 2) createButton("Смешная Птичка", "118417760427139", false, 2) createButton("Вприсядку", "97148848007002", false, 2) createButton("Смешная Гусеница", "135990691658209", false, 2) createButton("Rat Dance", "117444124506335", false, 2) createButton("Cart", "134980989756407", false, 2)
-createButton("Самолет", "94462256787399", false, 2) createButton("Большой Кутом", "93534084045396", false, 2) createButton("T-Pose", "121655148084031", false, 2) createButton("Ninja Rest", "102129991126923", false, 2) createButton("Zen", "135689691975338", false, 2) createButton("Fling", "93314771373362", false, 2)
-createButton("Backflip", "133675142555339", false, 2) createButton("Вертолет", "76510079095692", false, 2) createButton("Летать", "73980801925168", false, 2) createButton("Хаос", "86806707642727", false, 2)
-for _, animData in pairs(customAnims) do createCustomButton(animData.name, animData.id) end
-
-local spacer1 = Instance.new("Frame") spacer1.Size = UDim2.new(1, 0, 0, 5) spacer1.BackgroundTransparency = 1 spacer1.LayoutOrder = 4 spacer1.Parent = emotesScroll
-
-local function createInput(placeholder, order, parent)
-    local input = Instance.new("TextBox") input.Size = UDim2.new(1, -10, 0, 38) input.BackgroundColor3 = Color3.fromRGB(15, 15, 20) input.TextColor3 = Color3.fromRGB(255, 255, 255) input.PlaceholderText = placeholder input.Text = "" input.Font = Enum.Font.Gotham input.TextSize = 14 input.LayoutOrder = order input.Parent = parent
-    local corner = Instance.new("UICorner") corner.CornerRadius = UDim.new(0, 8) corner.Parent = input
-    local stroke = Instance.new("UIStroke") stroke.Color = Color3.fromRGB(80, 80, 100) stroke.Thickness = 1 stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border stroke.Parent = input
-    return input
-end
-
-local addNameInput = createInput("Название новой эмоции...", 5, emotesScroll)
-local addIdInput = createInput("ID эмоции (цифры)...", 6, emotesScroll)
-local addBtn = createButton("➕ Добавить эмоцию", nil, true, 7) addBtn.BackgroundColor3 = Color3.fromRGB(40, 120, 200) 
-addBtn.MouseButton1Click:Connect(function()
-    local newName = addNameInput.Text local newId = addIdInput.Text
-    if newName ~= "" and newId ~= "" then table.insert(customAnims, {name = newName, id = newId}) saveData() createCustomButton(newName, newId) addNameInput.Text = "" addIdInput.Text = "" end
-end)
-
-local spacer2 = Instance.new("Frame") spacer2.Size = UDim2.new(1, 0, 0, 5) spacer2.BackgroundTransparency = 1 spacer2.LayoutOrder = 8 spacer2.Parent = emotesScroll
-local stopBtn = createButton("⏹ ОСТАНОВИТЬ", nil, false, 9) stopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-stopBtn.MouseEnter:Connect(function() TweenService:Create(stopBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(230, 70, 70)}):Play() end)
-stopBtn.MouseLeave:Connect(function() TweenService:Create(stopBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(200, 50, 50)}):Play() end)
-stopBtn.MouseButton1Up:Connect(function() if currentAnimTrack then currentAnimTrack:Stop() end end)
-
--- ==========================================
--- ВКЛАДКА 2: АНИМАЦИИ ДВИЖЕНИЯ
--- ==========================================
-local movePadding = Instance.new("Frame") movePadding.Size = UDim2.new(1, 0, 0, 2) movePadding.BackgroundTransparency = 1 movePadding.LayoutOrder = 0 movePadding.Parent = movementScroll
-local infoLabel = Instance.new("TextLabel") infoLabel.Size = UDim2.new(1, -10, 0, 30) infoLabel.BackgroundTransparency = 1 infoLabel.TextColor3 = Color3.fromRGB(200, 200, 200) infoLabel.Text = "Готовые паки движений:" infoLabel.Font = Enum.Font.GothamBold infoLabel.TextSize = 14 infoLabel.LayoutOrder = 1 infoLabel.Parent = movementScroll
-
-local idleInput = createInput("Ожидание (Idle) ID...", 4, movementScroll)
-local walkInput = createInput("Ходьба (Walk) ID...", 5, movementScroll)
-local runInput = createInput("Бег (Run) ID...", 6, movementScroll)
-local jumpInput = createInput("Прыжок (Jump) ID...", 7, movementScroll)
-local fallInput = createInput("Падение (Fall) ID...", 8, movementScroll)
-
-local function setMovementAnim(stateName, animName, newId)
-    if not newId or newId == "" then return end
-    local char = player.Character if not char then return end
-    local animateScript = char:FindFirstChild("Animate")
-    if animateScript then
-        local stateObj = animateScript:FindFirstChild(stateName)
-        if stateObj then
-            local animObj = stateObj:FindFirstChild(animName)
-            if animObj and animObj:IsA("Animation") then
-                if not string.match(newId, "^rbxassetid://") then newId = "rbxassetid://" .. newId end
-                animObj.AnimationId = newId
-            end
+            tween(btnMove,0.2,{BackgroundColor3=C3(40,40,50), TextColor3=C3(255,255,255)}) tween(btnEmotes,0.2,{BackgroundColor3=C3(25,25,30), TextColor3=C3(150,150,150)})
+            scrEmotes.Visible=false scrMove.Visible=true
         end
     end
 end
-
-local function applyMovementSet(idle, walk, run, jump, fall)
-    idleInput.Text = idle or "" walkInput.Text = walk or "" runInput.Text = run or "" jumpInput.Text = jump or "" fallInput.Text = fall or ""
-    setMovementAnim("idle", "Animation1", idle) setMovementAnim("idle", "Animation2", idle) setMovementAnim("walk", "WalkAnim", walk) setMovementAnim("run", "RunAnim", run) setMovementAnim("jump", "JumpAnim", jump) setMovementAnim("fall", "FallAnim", fall)
-    local char = player.Character
-    if char then
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum then local animator = hum:FindFirstChildOfClass("Animator") if animator then for _, track in ipairs(animator:GetPlayingAnimationTracks()) do track:Stop() end end end
-    end
-end
-
-local animPacks = {
-    {name = "No Animations Pack", idle = "139422495554279", walk = "109690136432075", run = "140429302761672", jump = "113781194499932", fall = "92087058359779"},
-    {name = "R6 Animations Pack", idle = "131260802088656", walk = "81275475859584", run = "86501760984532", jump = "109853826438411", fall = "110640511139183"},
-    {name = "Adidas Community", idle = "122257458498464", walk = "122150855457006", run = "82598234841035", jump = "75290611992385", fall = "98600215928904"},
-    {name = "Mage Animations", idle = "10921144709", walk = "10921152678", run = "10921148209", jump = "10921149743", fall = "10921148939"},
-    {name = "Ninja Animations", idle = "10921155160", walk = "10921162768", run = "10921157929", jump = "10921160088", fall = "10921159222"}
-}
-
-local function createPackButton(packData, order)
-    local btn = Instance.new("TextButton") btn.Size = UDim2.new(1, -10, 0, 38) btn.LayoutOrder = order btn.BackgroundColor3 = Color3.fromRGB(50, 45, 60) btn.TextColor3 = Color3.fromRGB(240, 240, 255) btn.Text = "✨ " .. packData.name btn.Font = Enum.Font.GothamSemibold btn.TextSize = 14 btn.AutoButtonColor = false btn.Parent = movementScroll
-    local corner = Instance.new("UICorner") corner.CornerRadius = UDim.new(0, 8) corner.Parent = btn
-    local stroke = Instance.new("UIStroke") stroke.Color = Color3.fromRGB(100, 80, 120) stroke.Thickness = 1 stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border stroke.Parent = btn
-    btn.MouseEnter:Connect(function() TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(70, 60, 85)}):Play() end)
-    btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(50, 45, 60)}):Play() end)
-    btn.MouseButton1Down:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(1, -14, 0, 34)}):Play() end)
-    btn.MouseButton1Up:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(1, -10, 0, 38)}):Play() applyMovementSet(packData.idle, packData.walk, packData.run, packData.jump, packData.fall) end)
-end
-
-for _, pack in ipairs(animPacks) do createPackButton(pack, 2) end
-
-local infoLabel2 = Instance.new("TextLabel") infoLabel2.Size = UDim2.new(1, -10, 0, 35) infoLabel2.BackgroundTransparency = 1 infoLabel2.TextColor3 = Color3.fromRGB(200, 200, 200) infoLabel2.Text = "Свои ID:" infoLabel2.Font = Enum.Font.GothamBold infoLabel2.TextSize = 14 infoLabel2.LayoutOrder = 3 infoLabel2.Parent = movementScroll
-local moveSpacer = Instance.new("Frame") moveSpacer.Size = UDim2.new(1, 0, 0, 5) moveSpacer.BackgroundTransparency = 1 moveSpacer.LayoutOrder = 9 moveSpacer.Parent = movementScroll
-local applyMoveBtn = Instance.new("TextButton") applyMoveBtn.Size = UDim2.new(1, -10, 0, 45) applyMoveBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 60) applyMoveBtn.TextColor3 = Color3.fromRGB(255, 255, 255) applyMoveBtn.Text = "✅ Применить свои ID" applyMoveBtn.Font = Enum.Font.GothamBold applyMoveBtn.TextSize = 14 applyMoveBtn.LayoutOrder = 10 applyMoveBtn.Parent = movementScroll
-local amCorner = Instance.new("UICorner") amCorner.CornerRadius = UDim.new(0, 8) amCorner.Parent = applyMoveBtn
-local amStroke = Instance.new("UIStroke") amStroke.Color = Color3.fromRGB(80, 80, 100) amStroke.Thickness = 1 amStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border amStroke.Parent = applyMoveBtn
-
-applyMoveBtn.MouseButton1Click:Connect(function()
-    TweenService:Create(applyMoveBtn, TweenInfo.new(0.1), {Size = UDim2.new(1, -14, 0, 41)}):Play() task.wait(0.1) TweenService:Create(applyMoveBtn, TweenInfo.new(0.1), {Size = UDim2.new(1, -10, 0, 45)}):Play()
-    applyMovementSet(idleInput.Text, walkInput.Text, runInput.Text, jumpInput.Text, fallInput.Text)
-end)
-
--- Вызываем обновление вкладок
-updateTabs()
-
--- ==========================================
--- УПРАВЛЕНИЕ ОКНОМ, РАДУГОЙ И ВВОДОМ С КЛАВИАТУРЫ
--- ==========================================
-local function getMainWindowSize()
-    return isFullscreen and UDim2.new(0.85, 0, 0.85, 0) or UDim2.new(0, 280, 0, 480)
-end
-
-local function showWindow(frame, stroke, targetSize) frame.Visible = true TweenService:Create(frame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = targetSize}):Play() if stroke then TweenService:Create(stroke, TweenInfo.new(0.4), {Transparency = 0}):Play() end end
-local function hideWindow(frame, stroke) TweenService:Create(frame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Size = UDim2.new(0, 0, 0, 0)}):Play() if stroke then TweenService:Create(stroke, TweenInfo.new(0.2), {Transparency = 1}):Play() end task.delay(0.35, function() if frame.Size.X.Offset < 5 then frame.Visible = false end end) end
-
-local isMinimized = false
-
+btnEmotes.MouseButton1Click:Connect(function() if isFullscreen then curFullTab="Combined" else curNormTab="Emotes" end updateTabs() end)
+btnMove.MouseButton1Click:Connect(function() if not isFullscreen then curNormTab="Movements" updateTabs() end end)
+btnSecret.MouseButton1Click:Connect(function() if isFullscreen then curFullTab="Secret" updateTabs() end end)
 maxBtn.MouseButton1Click:Connect(function()
     isFullscreen = not isFullscreen
-    if isFullscreen then
-        maxBtn.Text = "❐"
-        mainFrame.Draggable = false
-        mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-        title.Size = UDim2.new(1, 0, 0, 40)
-        title.Position = UDim2.new(0, 0, 0, 0)
-        title.TextXAlignment = Enum.TextXAlignment.Center
-        TweenService:Create(mainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Size = getMainWindowSize()}):Play()
-    else
-        maxBtn.Text = "□"
-        mainFrame.Draggable = true
-        title.Size = UDim2.new(1, -120, 0, 40)
-        title.Position = UDim2.new(0, 15, 0, 0)
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        TweenService:Create(mainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Size = getMainWindowSize()}):Play()
-    end
+    if isFullscreen then maxBtn.Text="❐" mainFrame.Draggable=false mainFrame.Position=U2(0.5,0,0.5,0) title.Size=U2(1,0,0,40) title.Position=U2(0,0,0,0) title.TextXAlignment=Enum.TextXAlignment.Center tween(mainFrame, 0.4, {Size=getWinSize(), Position=U2(0.5,0,0.5,0)})
+    else maxBtn.Text="□" mainFrame.Draggable=true title.Size=U2(1,-120,0,40) title.Position=U2(0,15,0,0) title.TextXAlignment=Enum.TextXAlignment.Left tween(mainFrame, 0.4, {Size=getWinSize()}) end
     updateTabs()
 end)
 
-minimizeBtn.MouseButton1Click:Connect(function() isMinimized = true openBtn.Position = mainFrame.Position hideWindow(mainFrame, mainStroke) showWindow(openBtn, openStroke, UDim2.new(0, 50, 0, 50)) end)
-openBtn.MouseButton1Click:Connect(function() isMinimized = false mainFrame.Position = openBtn.Position hideWindow(openBtn, openStroke) showWindow(mainFrame, mainStroke, getMainWindowSize()) end)
-closeBtn.MouseButton1Click:Connect(function() showConfirmation("Точно закрыть панель анимаций?", function() if currentAnimTrack then currentAnimTrack:Stop() end hideWindow(mainFrame, mainStroke) task.wait(0.4) sgui:Destroy() end) end)
-
-local speed = 5 
-RunService.Heartbeat:Connect(function()
-    local hue = tick() % speed / speed local rgbColor = Color3.fromHSV(hue, 0.8, 1)
-    mainStroke.Color = rgbColor openStroke.Color = rgbColor title.TextColor3 = rgbColor
+-- ================== ЭМОЦИИ ==================
+make("Frame", {Size=U2(1,0,0,2), BackgroundTransparency=1, LayoutOrder=0}, scrEmotes)
+local isLoop, isBind, bindId, bindBtnObj = false, false, nil, nil
+local loopBtn = make("TextButton", {Size=U2(1,-10,0,38), BackgroundColor3=C3(60,60,70), TextColor3=C3(255,255,255), Text="🔁 Повтор: 1 РАЗ", Font=Enum.Font.GothamBold, TextSize=14, LayoutOrder=1}, scrEmotes)
+addCorner(loopBtn, 8) local loopStr = addStroke(loopBtn, C3(100,100,120), 1)
+loopBtn.MouseButton1Click:Connect(function()
+    isLoop = not isLoop
+    if isLoop then tween(loopBtn,0.2,{BackgroundColor3=C3(40,160,60)}) loopBtn.Text="🔁 Повтор: БЕСКОНЕЧНО" loopStr.Color=C3(80,200,100)
+    else tween(loopBtn,0.2,{BackgroundColor3=C3(60,60,70)}) loopBtn.Text="🔁 Повтор: 1 РАЗ" loopStr.Color=C3(100,100,120) end
+    if currentAnimTrack then currentAnimTrack.Looped = isLoop end
 end)
 
-showWindow(mainFrame, mainStroke, getMainWindowSize())
+local function playAnim(id)
+    local char = player.Character if not char then return end local hum = char:FindFirstChildOfClass("Humanoid") if not hum then return end
+    local anim = hum:FindFirstChildOfClass("Animator") or make("Animator", {}, hum)
+    if currentAnimTrack then currentAnimTrack:Stop() end
+    local a = make("Animation", {AnimationId = string.match(id, "^rbxassetid://") and id or "rbxassetid://"..id})
+    currentAnimTrack = anim:LoadAnimation(a) currentAnimTrack.Looped = isLoop currentAnimTrack:Play()
+end
 
-local isHidden = false
+local function setupBind(btn, id)
+    local k = binds[id] btn.Text = k and ("["..k.."]") or "[ - ]" btn.TextColor3 = k and C3(150,255,150) or C3(150,150,150)
+    btn.MouseButton1Click:Connect(function() if isBind then return end isBind, bindId, bindBtnObj = true, id, btn btn.Text="[...]" btn.TextColor3=C3(255,200,50) end)
+end
 
-UIS.InputBegan:Connect(function(input, gameProcessed)
-    if isBinding and input.UserInputType == Enum.UserInputType.Keyboard then
-        local keyName = input.KeyCode.Name
-        if keyName == "Escape" or keyName == "Backspace" then binds[bindingId] = nil else binds[bindingId] = keyName end
-        updateBindBtn(bindingBtn, binds[bindingId])
-        TweenService:Create(bindingBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(30, 30, 40)}):Play()
-        saveData()
-        isBinding = false bindingId = nil bindingBtn = nil
-        return
+local function makeEmote(name, id, isCust)
+    local c = make("Frame", {Size=U2(1,-10,0,38), BackgroundTransparency=1, LayoutOrder=isCust and 3 or 2}, scrEmotes)
+    local w = isCust and U2(1,-88,1,0) or U2(1,-44,1,0)
+    local pb = make("TextButton", {Size=w, BackgroundColor3=C3(40,40,50), TextColor3=C3(230,230,230), Text=(isCust and "⭐ " or "▶ ")..name, Font=Enum.Font.GothamSemibold, TextSize=14}, c)
+    addCorner(pb,8) addStroke(pb,C3(80,80,100),1)
+    local px = isCust and U2(1,-82,0,0) or U2(1,-38,0,0)
+    local bb = make("TextButton", {Size=U2(0,38,1,0), Position=px, BackgroundColor3=C3(30,30,40), Font=Enum.Font.GothamBold, TextSize=12}, c)
+    addCorner(bb,8) addStroke(bb,C3(80,80,100),1) setupBind(bb, id)
+    pb.MouseButton1Down:Connect(function() tween(pb,0.1,{Size=w-U2(0,4,0,4)}) end)
+    pb.MouseButton1Up:Connect(function() tween(pb,0.1,{Size=w}) playAnim(id) end)
+    if isCust then
+        local db = make("TextButton", {Size=U2(0,38,1,0), Position=U2(1,-38,0,0), BackgroundColor3=C3(60,30,35), TextColor3=C3(255,100,100), Text="🗑️", Font=Enum.Font.GothamBold, TextSize=14}, c)
+        addCorner(db,8) addStroke(db,C3(120,50,50),1)
+        db.MouseButton1Click:Connect(function() ask("Удалить эмоцию?", function() for i,v in ipairs(customAnims) do if v.id==id then table.remove(customAnims,i) break end end binds[id]=nil saveData() c:Destroy() end) end)
     end
+end
 
-    if gameProcessed then return end
+local defE = {{"Take The L","118343267142519"},{"Птичка","118417760427139"},{"Вприсядку","97148848007002"},{"Гусеница","135990691658209"},{"Rat Dance","117444124506335"},{"Cart","134980989756407"},{"Самолет","94462256787399"},{"T-Pose","121655148084031"},{"Zen","135689691975338"},{"Fling","93314771373362"},{"Backflip","133675142555339"},{"Вертолет","76510079095692"},{"Летать","73980801925168"},{"Хаос","86806707642727"}}
+for _,v in ipairs(defE) do makeEmote(v[1], v[2], false) end
+for _,v in ipairs(customAnims) do makeEmote(v.name, v.id, true) end
 
-    if input.UserInputType == Enum.UserInputType.Keyboard then
-        local keyName = input.KeyCode.Name
-        if keyName == "LeftControl" or keyName == "RightControl" then
+local function addInp(ph, ord) local t = make("TextBox", {Size=U2(1,-10,0,38), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText=ph, Font=Enum.Font.Gotham, TextSize=14, LayoutOrder=ord}, scrEmotes) addCorner(t,8) addStroke(t,C3(80,80,100),1) return t end
+local inpN, inpI = addInp("Название...", 5), addInp("ID...", 6)
+local addBtn = make("TextButton", {Size=U2(1,-10,0,38), BackgroundColor3=C3(40,120,200), TextColor3=C3(255,255,255), Text="➕ Добавить эмоцию", Font=Enum.Font.GothamBold, TextSize=14, LayoutOrder=7}, scrEmotes) addCorner(addBtn,8)
+addBtn.MouseButton1Click:Connect(function() if inpN.Text~="" and inpI.Text~="" then table.insert(customAnims, {name=inpN.Text, id=inpI.Text}) saveData() makeEmote(inpN.Text, inpI.Text, true) inpN.Text="" inpI.Text="" end end)
+local stopBtn = make("TextButton", {Size=U2(1,-10,0,38), BackgroundColor3=C3(200,50,50), TextColor3=C3(255,255,255), Text="⏹ ОСТАНОВИТЬ", Font=Enum.Font.GothamBold, TextSize=14, LayoutOrder=8}, scrEmotes) addCorner(stopBtn,8)
+stopBtn.MouseButton1Click:Connect(function() if currentAnimTrack then currentAnimTrack:Stop() end end)
+
+-- ================== ДВИЖЕНИЯ ==================
+make("TextLabel", {Size=U2(1,-10,0,30), BackgroundTransparency=1, TextColor3=C3(200,200,200), Text="Готовые паки:", Font=Enum.Font.GothamBold, TextSize=14, LayoutOrder=1}, scrMove)
+local function setMove(st, an, id) if not id or id=="" then return end local c=player.Character if c and c:FindFirstChild("Animate") then local o=c.Animate:FindFirstChild(st) if o and o:FindFirstChild(an) then o[an].AnimationId = string.match(id,"^rbxassetid://") and id or "rbxassetid://"..id end end end
+local function applyMove(i,w,r,j,f) setMove("idle","Animation1",i) setMove("idle","Animation2",i) setMove("walk","WalkAnim",w) setMove("run","RunAnim",r) setMove("jump","JumpAnim",j) setMove("fall","FallAnim",f) local c=player.Character if c then local h=c:FindFirstChildOfClass("Humanoid") if h then local a=h:FindFirstChildOfClass("Animator") if a then for _,t in ipairs(a:GetPlayingAnimationTracks()) do t:Stop() end end end end end
+
+local packs = {
+    {"No Animations","139422495554279","109690136432075","140429302761672","113781194499932","92087058359779"},
+    {"R6 Pack","131260802088656","81275475859584","86501760984532","109853826438411","110640511139183"},
+    {"Adidas","122257458498464","122150855457006","82598234841035","75290611992385","98600215928904"},
+    {"Ninja","10921155160","10921162768","10921157929","10921160088","10921159222"}
+}
+for _,p in ipairs(packs) do
+    local pb = make("TextButton", {Size=U2(1,-10,0,38), BackgroundColor3=C3(50,45,60), TextColor3=C3(240,240,255), Text="✨ "..p[1], Font=Enum.Font.GothamSemibold, TextSize=14, LayoutOrder=2}, scrMove) addCorner(pb,8)
+    pb.MouseButton1Click:Connect(function() applyMove(p[2],p[3],p[4],p[5],p[6]) end)
+end
+
+make("TextLabel", {Size=U2(1,-10,0,30), BackgroundTransparency=1, TextColor3=C3(200,200,200), Text="Свои ID движений:", Font=Enum.Font.GothamBold, TextSize=14, LayoutOrder=3}, scrMove)
+local function moveInp(p,o) local t=make("TextBox",{Size=U2(1,-10,0,38),BackgroundColor3=C3(15,15,20),TextColor3=C3(255,255,255),PlaceholderText=p,Font=Enum.Font.Gotham,TextSize=14,LayoutOrder=o},scrMove) addCorner(t,8) addStroke(t,C3(80,80,100),1) return t end
+local mI, mW, mR, mJ, mF = moveInp("Idle ID",4), moveInp("Walk ID",5), moveInp("Run ID",6), moveInp("Jump ID",7), moveInp("Fall ID",8)
+local apBtn = make("TextButton", {Size=U2(1,-10,0,45), BackgroundColor3=C3(40,160,60), TextColor3=C3(255,255,255), Text="✅ Применить", Font=Enum.Font.GothamBold, TextSize=14, LayoutOrder=9}, scrMove) addCorner(apBtn,8)
+apBtn.MouseButton1Click:Connect(function() applyMove(mI.Text,mW.Text,mR.Text,mJ.Text,mF.Text) end)
+
+-- ================== СЕКРЕТНОЕ VIP-MENU ==================
+local passF = make("Frame", {Size=U2(0,300,0,100), AnchorPoint=V2(0.5,0.5), Position=U2(0.5,0,0.5,0), BackgroundTransparency=1}, secretView)
+local passI = make("TextBox", {Size=U2(1,0,0,45), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText="Пароль", Font=Enum.Font.Gotham, TextSize=16}, passF) addCorner(passI,8) addStroke(passI,C3(80,80,100),1)
+local passB = make("TextButton", {Size=U2(1,0,0,40), Position=U2(0,0,0,55), BackgroundColor3=C3(40,120,200), TextColor3=C3(255,255,255), Text="Войти", Font=Enum.Font.GothamBold, TextSize=14}, passF) addCorner(passB,8)
+local errL = make("TextLabel", {Size=U2(1,0,0,25), Position=U2(0,0,0,-30), BackgroundTransparency=1, TextColor3=C3(255,80,80), Font=Enum.Font.GothamBold, TextSize=13, Text=""}, passF)
+
+local vipScr = make("ScrollingFrame", scrollProps, secretView) vipScr.Size = U2(1,0,1,0) vipScr.Visible = false
+make("UIListLayout", {SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,15)}, vipScr)
+make("TextLabel", {Size=U2(1,-10,0,30), BackgroundTransparency=1, TextColor3=C3(255,215,0), Text="⭐ VIP-Menu ⭐", Font=Enum.Font.GothamBlack, TextSize=18, LayoutOrder=0}, vipScr)
+
+local thms = {
+    {n="Кутом", t={"Кутом не читерит, он меняет реальность.", "Античит Роблокса извиняется перед Кутомом.", "Кутом может поделить на ноль.", "Когда Кутом заходит в игру, пинг падает у всех.", "Если Кутом прыгнет, вся Земля опустится вниз."}},
+    {n="Чугун", t={"Чугун настолько тяжелый, что сервер лагает от его шагов.", "Чугун не падает с карты, карта падает под Чугуном.", "Гравитация работает только тогда, когда Чугун разрешает.", "Чугун ел железо на завтрак еще до того, как это стало мейнстримом."}},
+    {n="Маркиз", t={"Маркиз заходит на сервер только в королевской походке.", "Даже админы спрашивают у Маркиза разрешения поиграть.", "Маркиз не бегает, он парит над хаосом.", "Элегантность Маркиза ломает любые текстуры."}}
+}
+local ti, ji = 1, 1
+local jCont = make("Frame", {Size=U2(1,-10,0,40), BackgroundTransparency=1, LayoutOrder=1}, vipScr)
+local thmB = make("TextButton", {Size=U2(0.65,0,1,0), BackgroundColor3=C3(45,45,55), TextColor3=C3(255,255,255), Text="🔄 Тема: Кутом", Font=Enum.Font.GothamBold, TextSize=13}, jCont) addCorner(thmB,8)
+local nxtB = make("TextButton", {Size=U2(0.32,0,1,0), Position=U2(0.68,0,0,0), BackgroundColor3=C3(50,40,70), TextColor3=C3(220,180,255), Text="След ➔", Font=Enum.Font.GothamBold, TextSize=12}, jCont) addCorner(nxtB,8)
+local jLab = make("TextLabel", {Size=U2(1,-10,0,50), BackgroundTransparency=1, TextColor3=C3(180,180,220), TextXAlignment=0, TextYAlignment=0, TextWrapped=true, Font=Enum.Font.Gotham, TextSize=13, LayoutOrder=2}, vipScr)
+local function updJoke() thmB.Text="🔄 Тема: "..thms[ti].n jLab.Text="« "..thms[ti].t[ji].." »" end
+thmB.MouseButton1Click:Connect(function() ti=ti+1 if ti>#thms then ti=1 end ji=1 updJoke() end)
+nxtB.MouseButton1Click:Connect(function() ji=ji+1 if ji>#thms[ti].t then ji=1 end updJoke() end)
+
+local function chkPass()
+    if passI.Text=="KutomHub-0JrRg9GC0L7QvCDQutGA0YPRgtC+0Lkg0LrRg9GC0L7QvCDQvNC+0LvQvtC00L7QuSDRh9GD0LPRg9C9INC+0LHQvtC20LDQtdGCINC80LDRgNC60LjQt9CwINGD0LLQsNC20LDQtdGC" then 
+        errL.TextColor3=C3(80,255,100) errL.Text="Верный пароль! Кутом гордится тобой!" task.wait(0.5) tween(passF,0.4,{Position=U2(0.5,0,1.5,0)}) task.wait(0.4) passF.Visible=false vipScr.Visible=true updJoke()
+    else errL.TextColor3=C3(255,80,80) errL.Text="Неверный пароль! Кутом его знает!" for i=1,4 do passF.Position=U2(0.5,0,0.5,0)+U2(0,math.random(-6,6),0,0) task.wait(0.04) end passF.Position=U2(0.5,0,0.5,0) end
+end
+passB.MouseButton1Click:Connect(chkPass)
+
+local function crCh(n, p, o, cb)
+    local c = make("Frame", {Size=U2(1,-10,0,42), BackgroundTransparency=1, LayoutOrder=o}, vipScr)
+    local inp = p and make("TextBox", {Size=U2(0.6,-10,1,0), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText=p, Font=Enum.Font.Gotham, TextSize=14}, c) or nil
+    if inp then addCorner(inp,8) addStroke(inp,C3(80,80,100),1) end
+    local b = make("TextButton", {Size=p and U2(0.4,0,1,0) or U2(1,0,1,0), Position=p and U2(0.6,0,0,0) or U2(0,0,0,0), BackgroundColor3=C3(40,120,200), TextColor3=C3(255,255,255), Text=n, Font=Enum.Font.GothamBold, TextSize=14}, c) addCorner(b,8)
+    b.MouseButton1Click:Connect(function() cb(inp and inp.Text or nil, b) end)
+end
+
+-- VIP ФУНКЦИИ (Скорость, Прыжок, Полет, Беск Прыжок)
+crCh("Скорость", "Обычная: 16", 3, function(v) local n=tonumber(v) if n and player.Character then local h=player.Character:FindFirstChildOfClass("Humanoid") if h then h.WalkSpeed=n end end end)
+crCh("Прыжок", "Обычная: 50", 4, function(v) local n=tonumber(v) if n and player.Character then local h=player.Character:FindFirstChildOfClass("Humanoid") if h then h.UseJumpPower=true h.JumpPower=n end end end)
+
+local flySpeed = 50
+crCh("Скор. полета", "Обычная: 50", 5, function(v) local n=tonumber(v) if n then flySpeed=n end end)
+
+local isFly, fConn, bv, bg = false, nil, nil, nil
+crCh("Полет", nil, 6, function(_, btn)
+    isFly = not isFly local c = player.Character if not c then return end local hrp = c:FindFirstChild("HumanoidRootPart") if not hrp then return end
+    if isFly then
+        btn.Text="Выкл Полет" btn.BackgroundColor3=C3(200,50,50)
+        bv=make("BodyVelocity",{MaxForce=Vector3.new(9e9,9e9,9e9)},hrp) bg=make("BodyGyro",{MaxTorque=Vector3.new(9e9,9e9,9e9), P=10000},hrp)
+        local cam = workspace.CurrentCamera
+        fConn = RS.RenderStepped:Connect(function()
+            if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then isFly=false fConn:Disconnect() return end
+            bg.CFrame = cam.CFrame local mv = Vector3.new()
+            if UIS:IsKeyDown(Enum.KeyCode.W) then mv=mv+cam.CFrame.LookVector end if UIS:IsKeyDown(Enum.KeyCode.S) then mv=mv-cam.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then mv=mv-cam.CFrame.RightVector end if UIS:IsKeyDown(Enum.KeyCode.D) then mv=mv+cam.CFrame.RightVector end
+            bv.Velocity = mv.Magnitude>0 and mv.Unit*flySpeed or Vector3.zero
+        end)
+    else btn.Text="Полет" btn.BackgroundColor3=C3(40,120,200) if fConn then fConn:Disconnect() end if bv then bv:Destroy() end if bg then bg:Destroy() end end
+end)
+
+local isInfJump = false
+crCh("Беск. Прыжок", nil, 7, function(_, btn)
+    isInfJump = not isInfJump
+    if isInfJump then btn.Text="Выкл Беск. Прыжок" btn.BackgroundColor3=C3(200,50,50)
+    else btn.Text="Беск. Прыжок" btn.BackgroundColor3=C3(40,120,200) end
+end)
+UIS.JumpRequest:Connect(function()
+    if isInfJump and player.Character then
+        local h = player.Character:FindFirstChildOfClass("Humanoid")
+        if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end
+    end
+end)
+
+updateTabs() showWin(mainFrame, mainStroke, getWinSize())
+
+-- ================== ГЛОБАЛЬНЫЕ КЛАВИШИ И РАДУГА ==================
+local isHidden = false
+RS.Heartbeat:Connect(function()
+    local c = Color3.fromHSV(tick() % 5 / 5, 0.8, 1)
+    mainStroke.Color = c 
+    openStroke.Color = c 
+    title.TextColor3 = c
+end)
+
+UIS.InputBegan:Connect(function(inp, gp)
+    if isBind and inp.UserInputType == Enum.UserInputType.Keyboard then
+        local k = inp.KeyCode.Name binds[bindId] = (k~="Escape" and k~="Backspace") and k or nil
+        bindBtnObj.Text = binds[bindId] and ("["..binds[bindId].."]") or "[ - ]"
+        bindBtnObj.TextColor3 = binds[bindId] and C3(150,255,150) or C3(150,150,150)
+        isBind = false saveData() return
+    end
+    if gp then return end
+    if inp.UserInputType == Enum.UserInputType.Keyboard then
+        local k = inp.KeyCode.Name
+        if k == "LeftControl" or k == "RightControl" then
             isHidden = not isHidden
-            if isHidden then hideWindow(mainFrame, mainStroke) hideWindow(openBtn, openStroke) else if isMinimized then showWindow(openBtn, openStroke, UDim2.new(0, 50, 0, 50)) else showWindow(mainFrame, mainStroke, getMainWindowSize()) end end
+            if isHidden then hideWin(mainFrame, mainStroke) hideWin(openBtn, openStroke) else if minBtn.Visible and openBtn.Size.X.Offset>10 then showWin(openBtn, openStroke, U2(0,50,0,50)) else showWin(mainFrame, mainStroke, getWinSize()) end end
             return
         end
-        for id, boundKey in pairs(binds) do
-            if boundKey == keyName then
-                local formattedId = id
-                if not string.match(formattedId, "^rbxassetid://") then formattedId = "rbxassetid://" .. formattedId end
-                if currentAnimTrack and currentAnimTrack.IsPlaying and currentAnimTrack.Animation and currentAnimTrack.Animation.AnimationId == formattedId then
-                    currentAnimTrack:Stop() currentAnimTrack = nil
-                else
-                    playAnim(id)
-                end
-                break
-            end
-        end
+        for id, bk in pairs(binds) do if bk == k then local a = currentAnimTrack if a and a.IsPlaying and string.find(a.Animation.AnimationId, id) then a:Stop() currentAnimTrack=nil else playAnim(id) end break end end
     end
 end)
