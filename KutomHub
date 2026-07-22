@@ -1,4 +1,4 @@
-local AutoExecuteURL = "https://raw.githubusercontent.com/Egorzq/koolhallokrutoi/refs/heads/main/KutomHub" -- ВСТАВЬ СЮДА СВОЮ RAW-ССЫЛКУ С GITHUB ДЛЯ АВТОЗАПУСКА ПРИ ПЕРЕЗАХОДЕ
+local AutoExecuteURL = "" -- ВСТАВЬ СЮДА СВОЮ RAW-ССЫЛКУ С GITHUB ДЛЯ АВТОЗАПУСКА ПРИ ПЕРЕЗАХОДЕ
 
 local player = game:GetService("Players").LocalPlayer
 local UIS = game:GetService("UserInputService")
@@ -11,8 +11,16 @@ local C3, U2, V2 = Color3.fromRGB, UDim2.new, Vector2.new
 
 -- ================== СОХРАНЕНИЕ ==================
 local saveFileName, customAnims, binds, allTeleports = "MyCustomAnims.json", {}, {}, {}
-local mySetts = {bg="rbxassetid://78674775572446", trans=0.5, r=120, g=150, b=255, rainbow=true, toggleKey="LeftControl"}
-local secretUnlocked = false -- Сбрасывается при каждом перезапуске/выходе из игры
+
+local defaultSetts = {
+    bg="rbxassetid://78674775572446", trans=0.5, r=120, g=150, b=255, rainbow=true, toggleKey="LeftControl",
+    targetSpeed=16, autoSpeed=false, targetJump=50, autoJump=false, flySpeed=50, clicks=0,
+    selectedPackName = nil, selectedPackData = nil
+}
+local mySetts = {}
+for k, v in pairs(defaultSetts) do mySetts[k] = v end
+
+local secretUnlocked = false
 
 pcall(function()
     if isfile and isfile(saveFileName) then
@@ -21,8 +29,7 @@ pcall(function()
             customAnims, binds = data.customAnims, data.binds or {}
             allTeleports = data.allTeleports or data.teleports or {}
             if data.mySetts then 
-                mySetts = data.mySetts 
-                if not mySetts.toggleKey then mySetts.toggleKey = "LeftControl" end
+                for k, v in pairs(data.mySetts) do mySetts[k] = v end
             end
         else customAnims = data end
     end
@@ -102,7 +109,6 @@ local tabBar = make("Frame", {Size=U2(1,0,0,35), Position=U2(0,0,0,40), Backgrou
 local btnEmotes = make("TextButton", {Size=U2(0.5,0,1,0), Position=U2(0,0,0,0), BackgroundColor3=C3(40,40,50), TextColor3=C3(255,255,255), Text="🎵 Эмоции", Font=Enum.Font.GothamBold, TextSize=14}, tabBar)
 local btnMove = make("TextButton", {Size=U2(0.5,0,1,0), Position=U2(0.5,0,0,0), BackgroundColor3=C3(25,25,30), TextColor3=C3(150,150,150), Text="🚶 Движения", Font=Enum.Font.GothamBold, TextSize=14}, tabBar)
 
--- Кнопки для полноэкранного режима
 local btnSecret = make("TextButton", {Size=U2(0,0,1,0), Position=U2(0,0,0,0), BackgroundColor3=C3(25,25,30), TextColor3=C3(150,150,150), Text="❓ Секретно", Font=Enum.Font.GothamBold, TextSize=14, Visible=false}, tabBar)
 local btnSetts = make("TextButton", {Size=U2(0,0,1,0), Position=U2(0,0,0,0), BackgroundColor3=C3(25,25,30), TextColor3=C3(150,150,150), Text="⚙️ Настройки", Font=Enum.Font.GothamBold, TextSize=14, Visible=false}, tabBar)
 
@@ -210,16 +216,35 @@ local defE = {{"Take The L","118343267142519"},{"Птичка","118417760427139"
 for _,v in ipairs(defE) do makeEmote(v[1], v[2], false) end
 for _,v in ipairs(customAnims) do makeEmote(v.name, v.id, true) end
 
-local function addInp(ph, ord) local t = make("TextBox", {Size=U2(1,-10,0,38), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText=ph, Font=Enum.Font.Gotham, TextSize=14, LayoutOrder=ord}, scrEmotes) addCorner(t,8) addStroke(t,C3(80,80,100),1) return t end
+local function addInp(ph, ord) local t = make("TextBox", {Size=U2(1,-10,0,38), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText=ph, Text="", Font=Enum.Font.Gotham, TextSize=14, LayoutOrder=ord}, scrEmotes) addCorner(t,8) addStroke(t,C3(80,80,100),1) return t end
 local inpN, inpI = addInp("Название...", 5), addInp("ID...", 6)
 local addBtn = make("TextButton", {Size=U2(1,-10,0,38), BackgroundColor3=C3(40,120,200), TextColor3=C3(255,255,255), Text="➕ Добавить эмоцию", Font=Enum.Font.GothamBold, TextSize=14, LayoutOrder=7}, scrEmotes) addCorner(addBtn,8)
 addBtn.MouseButton1Click:Connect(function() if inpN.Text~="" and inpI.Text~="" then table.insert(customAnims, {name=inpN.Text, id=inpI.Text}) saveData() makeEmote(inpN.Text, inpI.Text, true) inpN.Text="" inpI.Text="" end end)
 local stopBtn = make("TextButton", {Size=U2(1,-10,0,38), BackgroundColor3=C3(200,50,50), TextColor3=C3(255,255,255), Text="⏹ ОСТАНОВИТЬ", Font=Enum.Font.GothamBold, TextSize=14, LayoutOrder=8}, scrEmotes) addCorner(stopBtn,8) stopBtn.MouseButton1Click:Connect(function() if currentAnimTrack then currentAnimTrack:Stop() end end)
 
--- ================== ДВИЖЕНИЯ ==================
-make("TextLabel", {Size=U2(1,-10,0,30), BackgroundTransparency=1, TextColor3=C3(200,200,200), Text="Готовые паки:", Font=Enum.Font.GothamBold, TextSize=14, LayoutOrder=1}, scrMove)
+-- ================== ДВИЖЕНИЯ И АВТО-ПЕРЕЗАПУСК ==================
 local function setMove(st, an, id) if not id or id=="" then return end local c=player.Character if c and c:FindFirstChild("Animate") then local o=c.Animate:FindFirstChild(st) if o and o:FindFirstChild(an) then o[an].AnimationId = string.match(id,"^rbxassetid://") and id or "rbxassetid://"..id end end end
-local function applyMove(i,w,r,j,f) setMove("idle","Animation1",i) setMove("idle","Animation2",i) setMove("walk","WalkAnim",w) setMove("run","RunAnim",r) setMove("jump","JumpAnim",j) setMove("fall","FallAnim",f) local c=player.Character if c then local h=c:FindFirstChildOfClass("Humanoid") if h then local a=h:FindFirstChildOfClass("Animator") if a then for _,t in ipairs(a:GetPlayingAnimationTracks()) do t:Stop() end end end end end
+local function applyMove(i,w,r,j,f) 
+    setMove("idle","Animation1",i) setMove("idle","Animation2",i) 
+    setMove("walk","WalkAnim",w) setMove("run","RunAnim",r) 
+    setMove("jump","JumpAnim",j) setMove("fall","FallAnim",f) 
+    local c=player.Character if c then local h=c:FindFirstChildOfClass("Humanoid") if h then local a=h:FindFirstChildOfClass("Animator") if a then for _,t in ipairs(a:GetPlayingAnimationTracks()) do t:Stop() end end end end 
+end
+
+local function applyCurrentMovePack()
+    if mySetts.selectedPackData then
+        local p = mySetts.selectedPackData
+        applyMove(p[1], p[2], p[3], p[4], p[5])
+    end
+end
+
+-- Перезапуск при ресете
+player.CharacterAdded:Connect(function(char)
+    task.wait(1)
+    applyCurrentMovePack()
+end)
+
+make("TextLabel", {Size=U2(1,-10,0,30), BackgroundTransparency=1, TextColor3=C3(200,200,200), Text="Выбери активный пак (работает всегда):", Font=Enum.Font.GothamBold, TextSize=13, LayoutOrder=1}, scrMove)
 
 local packs = {
     {"Endless Aura","121544739965950","140535536297327","131446204283995","87182355463462","119546655136861"},
@@ -235,20 +260,60 @@ local packs = {
     {"Adidas","122257458498464","122150855457006","82598234841035","75290611992385","98600215928904"},
     {"Ninja","10921155160","10921162768","10921157929","10921160088","10921159222"}
 }
-for _,p in ipairs(packs) do
-    local pb = make("TextButton", {Size=U2(1,-10,0,38), BackgroundColor3=C3(50,45,60), TextColor3=C3(240,240,255), Text="✨ "..p[1], Font=Enum.Font.GothamSemibold, TextSize=14, LayoutOrder=2}, scrMove) addCorner(pb,8)
-    pb.MouseButton1Click:Connect(function() applyMove(p[2],p[3],p[4],p[5],p[6]) end)
+
+local packBtns = {}
+local function updatePackUI()
+    for name, b in pairs(packBtns) do
+        if mySetts.selectedPackName == name then
+            b.BackgroundColor3 = C3(40,160,60)
+            b.Text = "✅ " .. name .. " [АКТИВНО]"
+        else
+            b.BackgroundColor3 = C3(50,45,60)
+            b.Text = "✨ " .. name
+        end
+    end
 end
 
+for _,p in ipairs(packs) do
+    local pb = make("TextButton", {Size=U2(1,-10,0,38), BackgroundColor3=C3(50,45,60), TextColor3=C3(240,240,255), Text="✨ "..p[1], Font=Enum.Font.GothamSemibold, TextSize=14, LayoutOrder=2}, scrMove) addCorner(pb,8)
+    packBtns[p[1]] = pb
+    pb.MouseButton1Click:Connect(function()
+        mySetts.selectedPackName = p[1]
+        mySetts.selectedPackData = {p[2], p[3], p[4], p[5], p[6]}
+        saveData()
+        updatePackUI()
+        applyCurrentMovePack()
+        showNotice("Выбран пак: "..p[1])
+    end)
+end
+
+local resetAnimBtn = make("TextButton", {Size=U2(1,-10,0,38), BackgroundColor3=C3(180,50,50), TextColor3=C3(255,255,255), Text="⏹️ Сбросить анимацию (Обычная)", Font=Enum.Font.GothamBold, TextSize=13, LayoutOrder=2.5}, scrMove) addCorner(resetAnimBtn,8)
+resetAnimBtn.MouseButton1Click:Connect(function()
+    mySetts.selectedPackName = nil
+    mySetts.selectedPackData = nil
+    saveData()
+    updatePackUI()
+    showNotice("Анимация сброшена! Перезайдите или заресетьтесь.")
+end)
+
+updatePackUI()
+
 make("TextLabel", {Size=U2(1,-10,0,30), BackgroundTransparency=1, TextColor3=C3(200,200,200), Text="Свои ID движений:", Font=Enum.Font.GothamBold, TextSize=14, LayoutOrder=3}, scrMove)
-local function moveInp(p,o) local t=make("TextBox",{Size=U2(1,-10,0,38),BackgroundColor3=C3(15,15,20),TextColor3=C3(255,255,255),PlaceholderText=p,Font=Enum.Font.Gotham,TextSize=14,LayoutOrder=o},scrMove) addCorner(t,8) addStroke(t,C3(80,80,100),1) return t end
+local function moveInp(p,o) local t=make("TextBox",{Size=U2(1,-10,0,38),BackgroundColor3=C3(15,15,20),TextColor3=C3(255,255,255),PlaceholderText=p,Text="",Font=Enum.Font.Gotham,TextSize=14,LayoutOrder=o},scrMove) addCorner(t,8) addStroke(t,C3(80,80,100),1) return t end
 local mI, mW, mR, mJ, mF = moveInp("Idle ID",4), moveInp("Walk ID",5), moveInp("Run ID",6), moveInp("Jump ID",7), moveInp("Fall ID",8)
-local apBtn = make("TextButton", {Size=U2(1,-10,0,45), BackgroundColor3=C3(40,160,60), TextColor3=C3(255,255,255), Text="✅ Применить", Font=Enum.Font.GothamBold, TextSize=14, LayoutOrder=9}, scrMove) addCorner(apBtn,8)
-apBtn.MouseButton1Click:Connect(function() applyMove(mI.Text,mW.Text,mR.Text,mJ.Text,mF.Text) end)
+local apBtn = make("TextButton", {Size=U2(1,-10,0,45), BackgroundColor3=C3(40,160,60), TextColor3=C3(255,255,255), Text="✅ Применить кастомные ID", Font=Enum.Font.GothamBold, TextSize=14, LayoutOrder=9}, scrMove) addCorner(apBtn,8)
+apBtn.MouseButton1Click:Connect(function() 
+    mySetts.selectedPackName = "Custom"
+    mySetts.selectedPackData = {mI.Text, mW.Text, mR.Text, mJ.Text, mF.Text}
+    saveData()
+    updatePackUI()
+    applyCurrentMovePack()
+    showNotice("Кастомные ID применены и сохранены!")
+end)
 
 -- ================== СЕКРЕТНОЕ VIP-MENU ==================
 local passF = make("Frame", {Size=U2(0,300,0,100), AnchorPoint=V2(0.5,0.5), Position=U2(0.5,0,0.5,0), BackgroundTransparency=1}, secretView)
-local passI = make("TextBox", {Size=U2(1,0,0,45), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText="Пароль", Font=Enum.Font.Gotham, TextSize=16}, passF) addCorner(passI,8) addStroke(passI,C3(80,80,100),1)
+local passI = make("TextBox", {Size=U2(1,0,0,45), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText="Пароль", Text="", Font=Enum.Font.Gotham, TextSize=16}, passF) addCorner(passI,8) addStroke(passI,C3(80,80,100),1)
 local passB = make("TextButton", {Size=U2(1,0,0,40), Position=U2(0,0,0,55), BackgroundColor3=C3(40,120,200), TextColor3=C3(255,255,255), Text="Войти", Font=Enum.Font.GothamBold, TextSize=14}, passF) addCorner(passB,8)
 local errL = make("TextLabel", {Size=U2(1,0,0,25), Position=U2(0,0,0,-30), BackgroundTransparency=1, TextColor3=C3(255,80,80), Font=Enum.Font.GothamBold, TextSize=13, Text=""}, passF)
 
@@ -278,23 +343,71 @@ local function chkPass()
 end
 passB.MouseButton1Click:Connect(chkPass)
 
-local function crCh(n, p, o, cb)
-    local c = make("Frame", {Size=U2(1,-10,0,42), BackgroundTransparency=1, LayoutOrder=o}, vipScr)
-    local inp = p and make("TextBox", {Size=U2(0.6,-10,1,0), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText=p, Font=Enum.Font.Gotham, TextSize=14}, c) or nil
-    if inp then addCorner(inp,8) addStroke(inp,C3(80,80,100),1) end
-    local b = make("TextButton", {Size=p and U2(0.4,0,1,0) or U2(1,0,1,0), Position=p and U2(0.6,0,0,0) or U2(0,0,0,0), BackgroundColor3=C3(40,120,200), TextColor3=C3(255,255,255), Text=n, Font=Enum.Font.GothamBold, TextSize=14}, c) addCorner(b,8)
-    if cb then b.MouseButton1Click:Connect(function() cb(inp and inp.Text or nil, b) end) end
-    return c, b
-end
+-- 1. СКОРОСТЬ
+local speedRow = make("Frame", {Size=U2(1,-10,0,42), BackgroundTransparency=1, LayoutOrder=3}, vipScr)
+local sInp = make("TextBox", {Size=U2(0.35,0,1,0), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText="Скор: 16", Text=tostring(mySetts.targetSpeed), Font=Enum.Font.Gotham, TextSize=12}, speedRow) addCorner(sInp,6) addStroke(sInp,C3(80,80,100),1)
+local sApply = make("TextButton", {Size=U2(0.25,-5,1,0), Position=U2(0.35,5,0,0), BackgroundColor3=C3(40,120,200), TextColor3=C3(255,255,255), Text="Применить", Font=Enum.Font.GothamBold, TextSize=11}, speedRow) addCorner(sApply,6)
+local sAuto = make("TextButton", {Size=U2(0.2,-5,1,0), Position=U2(0.6,5,0,0), BackgroundColor3=mySetts.autoSpeed and C3(40,160,60) or C3(60,60,70), TextColor3=C3(200,200,200), Text=mySetts.autoSpeed and "Авто: ✅" or "Авто: ❌", Font=Enum.Font.GothamBold, TextSize=11}, speedRow) addCorner(sAuto,6)
+local sReset = make("TextButton", {Size=U2(0.2,-5,1,0), Position=U2(0.8,5,0,0), BackgroundColor3=C3(180,60,60), TextColor3=C3(255,255,255), Text="Сброс", Font=Enum.Font.GothamBold, TextSize=11}, speedRow) addCorner(sReset,6)
 
-crCh("Скорость", "Обычная: 16", 3, function(v) local n=tonumber(v) if n and player.Character then local h=player.Character:FindFirstChildOfClass("Humanoid") if h then h.WalkSpeed=n end end end)
-crCh("Прыжок", "Обычная: 50", 4, function(v) local n=tonumber(v) if n and player.Character then local h=player.Character:FindFirstChildOfClass("Humanoid") if h then h.UseJumpPower=true h.JumpPower=n end end end)
+sApply.MouseButton1Click:Connect(function() 
+    local n = tonumber(sInp.Text) 
+    if n then 
+        mySetts.targetSpeed = n 
+        saveData()
+        if player.Character then local h = player.Character:FindFirstChildOfClass("Humanoid") if h then h.WalkSpeed = n end end 
+    end 
+end)
+sAuto.MouseButton1Click:Connect(function()
+    mySetts.autoSpeed = not mySetts.autoSpeed
+    saveData()
+    sAuto.Text = mySetts.autoSpeed and "Авто: ✅" or "Авто: ❌"
+    sAuto.BackgroundColor3 = mySetts.autoSpeed and C3(40,160,60) or C3(60,60,70)
+end)
+sReset.MouseButton1Click:Connect(function()
+    mySetts.targetSpeed = 16 saveData() sInp.Text = "16"
+    if player.Character then local h = player.Character:FindFirstChildOfClass("Humanoid") if h then h.WalkSpeed = 16 end end
+end)
 
-local flySpeed = 50
-crCh("Скор. полета", "Обычная: 50", 5, function(v) local n=tonumber(v) if n then flySpeed=n end end)
+-- 2. ПРЫЖОК
+local jumpRow = make("Frame", {Size=U2(1,-10,0,42), BackgroundTransparency=1, LayoutOrder=4}, vipScr)
+local jInp = make("TextBox", {Size=U2(0.35,0,1,0), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText="Прыж: 50", Text=tostring(mySetts.targetJump), Font=Enum.Font.Gotham, TextSize=12}, jumpRow) addCorner(jInp,6) addStroke(jInp,C3(80,80,100),1)
+local jApply = make("TextButton", {Size=U2(0.25,-5,1,0), Position=U2(0.35,5,0,0), BackgroundColor3=C3(40,120,200), TextColor3=C3(255,255,255), Text="Применить", Font=Enum.Font.GothamBold, TextSize=11}, jumpRow) addCorner(jApply,6)
+local jAuto = make("TextButton", {Size=U2(0.2,-5,1,0), Position=U2(0.6,5,0,0), BackgroundColor3=mySetts.autoJump and C3(40,160,60) or C3(60,60,70), TextColor3=C3(200,200,200), Text=mySetts.autoJump and "Авто: ✅" or "Авто: ❌", Font=Enum.Font.GothamBold, TextSize=11}, jumpRow) addCorner(jAuto,6)
+local jReset = make("TextButton", {Size=U2(0.2,-5,1,0), Position=U2(0.8,5,0,0), BackgroundColor3=C3(180,60,60), TextColor3=C3(255,255,255), Text="Сброс", Font=Enum.Font.GothamBold, TextSize=11}, jumpRow) addCorner(jReset,6)
 
+jApply.MouseButton1Click:Connect(function() 
+    local n = tonumber(jInp.Text) 
+    if n then 
+        mySetts.targetJump = n 
+        saveData()
+        if player.Character then local h = player.Character:FindFirstChildOfClass("Humanoid") if h then h.UseJumpPower=true h.JumpPower=n end end 
+    end 
+end)
+jAuto.MouseButton1Click:Connect(function()
+    mySetts.autoJump = not mySetts.autoJump
+    saveData()
+    jAuto.Text = mySetts.autoJump and "Авто: ✅" or "Авто: ❌"
+    jAuto.BackgroundColor3 = mySetts.autoJump and C3(40,160,60) or C3(60,60,70)
+end)
+jReset.MouseButton1Click:Connect(function()
+    mySetts.targetJump = 50 saveData() jInp.Text = "50"
+    if player.Character then local h = player.Character:FindFirstChildOfClass("Humanoid") if h then h.UseJumpPower=true h.JumpPower = 50 end end
+end)
+
+-- 3. СКОРОСТЬ ПОЛЕТА
+local fSpeedRow = make("Frame", {Size=U2(1,-10,0,42), BackgroundTransparency=1, LayoutOrder=5}, vipScr)
+local fInp = make("TextBox", {Size=U2(0.35,0,1,0), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText="Скор. Полета: 50", Text=tostring(mySetts.flySpeed), Font=Enum.Font.Gotham, TextSize=11}, fSpeedRow) addCorner(fInp,6) addStroke(fInp,C3(80,80,100),1)
+local fApply = make("TextButton", {Size=U2(0.45,-5,1,0), Position=U2(0.35,5,0,0), BackgroundColor3=C3(40,120,200), TextColor3=C3(255,255,255), Text="Применить", Font=Enum.Font.GothamBold, TextSize=11}, fSpeedRow) addCorner(fApply,6)
+local fReset = make("TextButton", {Size=U2(0.2,-5,1,0), Position=U2(0.8,5,0,0), BackgroundColor3=C3(180,60,60), TextColor3=C3(255,255,255), Text="Сброс", Font=Enum.Font.GothamBold, TextSize=11}, fSpeedRow) addCorner(fReset,6)
+
+fApply.MouseButton1Click:Connect(function() local n = tonumber(fInp.Text) if n then mySetts.flySpeed = n saveData() end end)
+fReset.MouseButton1Click:Connect(function() mySetts.flySpeed = 50 saveData() fInp.Text = "50" end)
+
+-- 4. КНОПКИ ПОЛЕТА И NOCLIP
 local flyCont = make("Frame", {Size=U2(1,-10,0,42), BackgroundTransparency=1, LayoutOrder=6}, vipScr)
-local flyBtnObj = make("TextButton", {Size=U2(1,-44,1,0), BackgroundColor3=C3(40,120,200), TextColor3=C3(255,255,255), Text="Полет", Font=Enum.Font.GothamBold, TextSize=14}, flyCont) addCorner(flyBtnObj,8)
+local flyBtnObj = make("TextButton", {Size=U2(0.5,-22,1,0), BackgroundColor3=C3(40,120,200), TextColor3=C3(255,255,255), Text="Полет", Font=Enum.Font.GothamBold, TextSize=14}, flyCont) addCorner(flyBtnObj,8)
+local noclipBtn = make("TextButton", {Size=U2(0.5,-22,1,0), Position=U2(0.5,-17,0,0), BackgroundColor3=C3(150,50,200), TextColor3=C3(255,255,255), Text="Noclip", Font=Enum.Font.GothamBold, TextSize=14}, flyCont) addCorner(noclipBtn,8) addStroke(noclipBtn, C3(255,255,255), 1)
 local flyBindBtn = make("TextButton", {Size=U2(0,38,1,0), Position=U2(1,-38,0,0), BackgroundColor3=C3(30,30,40), Font=Enum.Font.GothamBold, TextSize=12}, flyCont) addCorner(flyBindBtn,8) addStroke(flyBindBtn,C3(80,80,100),1) setupBind(flyBindBtn, "VIP_Fly")
 
 local isFly, fConn, bv, bg = false, nil, nil, nil
@@ -309,17 +422,40 @@ local function toggleFly()
             bg.CFrame = cam.CFrame local mv = Vector3.new()
             if UIS:IsKeyDown(Enum.KeyCode.W) then mv=mv+cam.CFrame.LookVector end if UIS:IsKeyDown(Enum.KeyCode.S) then mv=mv-cam.CFrame.LookVector end
             if UIS:IsKeyDown(Enum.KeyCode.A) then mv=mv-cam.CFrame.RightVector end if UIS:IsKeyDown(Enum.KeyCode.D) then mv=mv+cam.CFrame.RightVector end
-            bv.Velocity = mv.Magnitude>0 and mv.Unit*flySpeed or Vector3.zero
+            bv.Velocity = mv.Magnitude>0 and mv.Unit*mySetts.flySpeed or Vector3.zero
         end)
     else flyBtnObj.Text="Полет" flyBtnObj.BackgroundColor3=C3(40,120,200) if fConn then fConn:Disconnect() end if bv then bv:Destroy() end if bg then bg:Destroy() end end
 end
 flyBtnObj.MouseButton1Click:Connect(toggleFly)
 
+local isNoclip = false
+local noclipConn = nil
+noclipBtn.MouseButton1Click:Connect(function()
+    isNoclip = not isNoclip
+    noclipBtn.Text = isNoclip and "Noclip: ВКЛ" or "Noclip"
+    if isNoclip then
+        noclipConn = RS.Stepped:Connect(function()
+            if player.Character then
+                for _, v in ipairs(player.Character:GetDescendants()) do
+                    if v:IsA("BasePart") and v.CanCollide then
+                        v.CanCollide = false
+                    end
+                end
+            end
+        end)
+    else
+        if noclipConn then noclipConn:Disconnect() noclipConn = nil end
+    end
+end)
+
+-- 5. БЕСКОНЕЧНЫЙ ПРЫЖОК
+local infJumpRow = make("Frame", {Size=U2(1,-10,0,42), BackgroundTransparency=1, LayoutOrder=7}, vipScr)
+local infJumpBtn = make("TextButton", {Size=U2(1,0,1,0), BackgroundColor3=C3(40,120,200), TextColor3=C3(255,255,255), Text="Беск. Прыжок", Font=Enum.Font.GothamBold, TextSize=14}, infJumpRow) addCorner(infJumpBtn,8)
 local isInfJump = false
-crCh("Беск. Прыжок", nil, 7, function(_, btn)
+infJumpBtn.MouseButton1Click:Connect(function()
     isInfJump = not isInfJump
-    if isInfJump then btn.Text="Выкл Беск. Прыжок" btn.BackgroundColor3=C3(200,50,50)
-    else btn.Text="Беск. Прыжок" btn.BackgroundColor3=C3(40,120,200) end
+    if isInfJump then infJumpBtn.Text="Выкл Беск. Прыжок" infJumpBtn.BackgroundColor3=C3(200,50,50)
+    else infJumpBtn.Text="Беск. Прыжок" infJumpBtn.BackgroundColor3=C3(40,120,200) end
 end)
 UIS.JumpRequest:Connect(function()
     if isInfJump and player.Character then local h = player.Character:FindFirstChildOfClass("Humanoid") if h then h:ChangeState(Enum.HumanoidStateType.Jumping) end end
@@ -330,7 +466,7 @@ local tpContainer = make("Frame", {Size=U2(1,-10,0,130), BackgroundColor3=C3(15,
 addCorner(tpContainer,8) addStroke(tpContainer,C3(80,80,100),1)
 make("TextLabel", {Size=U2(1,0,0,25), BackgroundTransparency=1, TextColor3=C3(255,215,0), Text="📍 Сохраненные точки (этой игры)", Font=Enum.Font.GothamBold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Center}, tpContainer)
 
-local tpNameInp = make("TextBox", {Size=U2(0.6,-10,0,32), Position=U2(0,5,0,28), BackgroundColor3=C3(25,25,32), TextColor3=C3(255,255,255), PlaceholderText="Имя точки...", Font=Enum.Font.Gotham, TextSize=13}, tpContainer) addCorner(tpNameInp,6) addStroke(tpNameInp,C3(80,80,100),1)
+local tpNameInp = make("TextBox", {Size=U2(0.6,-10,0,32), Position=U2(0,5,0,28), BackgroundColor3=C3(25,25,32), TextColor3=C3(255,255,255), PlaceholderText="Имя точки...", Text="", Font=Enum.Font.Gotham, TextSize=13}, tpContainer) addCorner(tpNameInp,6) addStroke(tpNameInp,C3(80,80,100),1)
 local saveTpBtn = make("TextButton", {Size=U2(0.4,-10,0,32), Position=U2(0.6,5,0,28), BackgroundColor3=C3(40,160,60), TextColor3=C3(255,255,255), Text="💾 Сохранить", Font=Enum.Font.GothamBold, TextSize=12}, tpContainer) addCorner(saveTpBtn,6)
 
 local tpScroll = make("ScrollingFrame", {Size=U2(1,-10,0,55), Position=U2(0,5,0,65), BackgroundTransparency=1, ScrollBarThickness=3, AutomaticCanvasSize=Enum.AutomaticSize.Y, CanvasSize=U2(0,0,0,0)}, tpContainer)
@@ -388,7 +524,7 @@ end)
 
 local function settsRow(n, ph, ord, cb)
     local c = make("Frame", {Size=U2(1,-10,0,45), BackgroundTransparency=1, LayoutOrder=ord}, settsScr)
-    local inp = make("TextBox", {Size=U2(0.55,-10,1,0), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText=ph, Font=Enum.Font.Gotham, TextSize=13, Text=""}, c) addCorner(inp,8) addStroke(inp,C3(80,80,100),1)
+    local inp = make("TextBox", {Size=U2(0.55,-10,1,0), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText=ph, Text="", Font=Enum.Font.Gotham, TextSize=13}, c) addCorner(inp,8) addStroke(inp,C3(80,80,100),1)
     local b = make("TextButton", {Size=U2(0.45,0,1,0), Position=U2(0.55,0,0,0), BackgroundColor3=C3(50,50,65), TextColor3=C3(255,255,255), Text=n, Font=Enum.Font.GothamBold, TextSize=12}, c) addCorner(b,8)
     b.MouseButton1Click:Connect(function() cb(inp.Text) end)
 end
@@ -412,6 +548,55 @@ toggleBtn.MouseButton1Click:Connect(function()
     isListeningToggle = true toggleBtn.Text = "[...]" toggleBtn.TextColor3 = C3(255,200,50)
 end)
 
+-- ================= МЕНЕДЖЕР КОНФИГОВ (СОХРАНЕНИЕ / ЗАГРУЗКА) =================
+local cfgCont = make("Frame", {Size=U2(1,-10,0,85), BackgroundColor3=C3(25,25,32), LayoutOrder=5.5}, settsScr)
+addCorner(cfgCont,8) addStroke(cfgCont,C3(80,80,100),1)
+make("TextLabel", {Size=U2(1,0,0,25), BackgroundTransparency=1, TextColor3=C3(255,215,0), Text="📁 Менеджер Конфигов", Font=Enum.Font.GothamBold, TextSize=13, TextXAlignment=Enum.TextXAlignment.Center}, cfgCont)
+
+local cfgNameInp = make("TextBox", {Size=U2(1,-10,0,28), Position=U2(0,5,0,25), BackgroundColor3=C3(15,15,20), TextColor3=C3(255,255,255), PlaceholderText="Имя конфига...", Text="", Font=Enum.Font.Gotham, TextSize=12}, cfgCont) addCorner(cfgNameInp,6) addStroke(cfgNameInp,C3(80,80,100),1)
+
+local cfgSaveBtn = make("TextButton", {Size=U2(0.32,-5,0,25), Position=U2(0,5,0,55), BackgroundColor3=C3(40,160,60), TextColor3=C3(255,255,255), Text="💾 Сохранить", Font=Enum.Font.GothamBold, TextSize=11}, cfgCont) addCorner(cfgSaveBtn,6)
+local cfgLoadBtn = make("TextButton", {Size=U2(0.32,-5,0,25), Position=U2(0.33,5,0,55), BackgroundColor3=C3(40,120,200), TextColor3=C3(255,255,255), Text="📂 Загрузить", Font=Enum.Font.GothamBold, TextSize=11}, cfgCont) addCorner(cfgLoadBtn,6)
+local cfgDelBtn  = make("TextButton", {Size=U2(0.32,-5,0,25), Position=U2(0.66,5,0,55), BackgroundColor3=C3(180,50,50), TextColor3=C3(255,255,255), Text="🗑️ Удалить", Font=Enum.Font.GothamBold, TextSize=11}, cfgCont) addCorner(cfgDelBtn,6)
+
+cfgSaveBtn.MouseButton1Click:Connect(function()
+    local name = cfgNameInp.Text
+    if name ~= "" and writefile then
+        local fullName = name..".json"
+        allTeleports[placeKey] = teleports
+        local cfgData = Http:JSONEncode({customAnims=customAnims, binds=binds, allTeleports=allTeleports, mySetts=mySetts})
+        pcall(function() writefile(fullName, cfgData) end)
+        showNotice("Конфиг '"..name.."' сохранен!")
+    end
+end)
+
+cfgLoadBtn.MouseButton1Click:Connect(function()
+    local name = cfgNameInp.Text
+    if name ~= "" and readfile and isfile and isfile(name..".json") then
+        pcall(function()
+            local data = Http:JSONDecode(readfile(name..".json"))
+            if data then
+                if data.customAnims then customAnims = data.customAnims end
+                if data.binds then binds = data.binds end
+                if data.allTeleports then allTeleports = data.allTeleports end
+                if data.mySetts then for k,v in pairs(data.mySetts) do mySetts[k] = v end end
+                saveData()
+                showNotice("Конфиг '"..name.."' загружен! Перезапустите хаб.")
+            end
+        end)
+    else
+        showNotice("Конфиг не найден!")
+    end
+end)
+
+cfgDelBtn.MouseButton1Click:Connect(function()
+    local name = cfgNameInp.Text
+    if name ~= "" and delfile and isfile and isfile(name..".json") then
+        pcall(function() delfile(name..".json") end)
+        showNotice("Конфиг '"..name.."' удален!")
+    end
+end)
+
 local qot = queue_on_teleport or (syn and syn.queue_on_teleport) or function() end
 local function prepRejoin() if AutoExecuteURL ~= "" then pcall(function() qot('loadstring(game:HttpGet("'..AutoExecuteURL..'"))()') end) end end
 
@@ -431,6 +616,27 @@ hopBtn.MouseButton1Click:Connect(function()
         end
     end)
     Teleport:Teleport(game.PlaceId, player)
+end)
+
+-- СМЕШНОЙ КЛИКЕР
+local clickerCont = make("Frame", {Size=U2(1,-10,0,70), BackgroundColor3=C3(25,25,32), LayoutOrder=8}, settsScr)
+addCorner(clickerCont, 8) addStroke(clickerCont, C3(80,80,100), 1)
+
+local clickBtn = make("ImageButton", {Size=U2(0,50,0,50), Position=U2(0,10,0,10), BackgroundColor3=C3(40,40,50), Image="rbxassetid://124115730204552", ScaleType=Enum.ScaleType.Crop}, clickerCont)
+make("UICorner", {CornerRadius=UDim.new(1,0)}, clickBtn)
+addStroke(clickBtn, C3(255,255,255), 2)
+
+local clickTitle = make("TextLabel", {Size=U2(1,-75,0,25), Position=U2(0,70,0,10), BackgroundTransparency=1, TextColor3=C3(255,215,0), Text="Смешной кликер", Font=Enum.Font.GothamBold, TextSize=14, TextXAlignment=0}, clickerCont)
+local clickLabel = make("TextLabel", {Size=U2(1,-75,0,25), Position=U2(0,70,0,35), BackgroundTransparency=1, TextColor3=C3(255,255,255), Text="Нажатий: "..tostring(mySetts.clicks), Font=Enum.Font.GothamBlack, TextSize=14, TextXAlignment=0}, clickerCont)
+
+clickBtn.MouseButton1Down:Connect(function()
+    tween(clickBtn, 0.1, {Size=U2(0,44,0,44), Position=U2(0,13,0,13)})
+end)
+clickBtn.MouseButton1Up:Connect(function()
+    tween(clickBtn, 0.1, {Size=U2(0,50,0,50), Position=U2(0,10,0,10)})
+    mySetts.clicks = mySetts.clicks + 1
+    clickLabel.Text = "Нажатий: "..tostring(mySetts.clicks)
+    saveData()
 end)
 
 -- СКРЫТЫЙ ТЕКСТ "By Kutom" ДЛЯ АКТИВАЦИИ СЕКРЕТНОЙ ВКЛАДКИ (5 кликов)
@@ -456,6 +662,9 @@ RS.Heartbeat:Connect(function()
     mainStroke.Color = c 
     openStroke.Color = c 
     title.TextColor3 = c
+    if noclipBtn then
+        noclipBtn.BackgroundColor3 = Color3.fromHSV(tick() % 3 / 3, 0.8, 0.9)
+    end
 end)
 
 UIS.InputBegan:Connect(function(inp, gp)
@@ -491,7 +700,6 @@ UIS.InputBegan:Connect(function(inp, gp)
     if inp.UserInputType == Enum.UserInputType.Keyboard then
         local k = inp.KeyCode.Name
         
-        -- ОТКРЫТИЕ/ЗАКРЫТИЕ ПО КАСТОМНОЙ КНОПКЕ ИЛИ CTRL
         if k == mySetts.toggleKey or k == "LeftControl" or k == "RightControl" then
             isHidden = not isHidden
             if isHidden then hideWin(mainFrame, mainStroke) hideWin(openBtn, openStroke) else if minBtn.Visible and openBtn.Size.X.Offset>10 then showWin(openBtn, openStroke, U2(0,50,0,50)) else showWin(mainFrame, mainStroke, getWinSize()) end end
